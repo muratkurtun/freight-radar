@@ -1,0 +1,20 @@
+# Docker-only requirements file.
+# Kept in sync manually with pyproject.toml [project.dependencies].
+# Local dev can use either this or `pip install -e .` — both produce the
+# same set of packages.
+
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+alembic>=1.13
+pydantic[email]>=2.7
+pydantic-settings>=2.3
+python-jose[cryptography]>=3.3
+passlib[bcrypt]>=1.7
+apscheduler>=3.10
+requests>=2.32
+beautifulsoup4>=4.12
+feedparser>=6.0
+anthropic>=0.39
+python-multipart>=0.0.9

@@ -1,0 +1,29 @@
+.actions {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.reject-row td {
+  background: #fafbfc;
+  padding: 12px;
+}
+
+.reject-form textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  resize: vertical;
+  min-height: 60px;
+  font-family: inherit;
+
+  &:focus { outline: none; border-color: var(--accent); }
+}
+
+.reject-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}

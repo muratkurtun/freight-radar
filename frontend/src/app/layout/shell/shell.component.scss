@@ -1,0 +1,84 @@
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 220px;
+  background: #111827;
+  color: #e5e7eb;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.brand {
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  padding: 0 6px;
+  color: #ffffff;
+}
+
+nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  a {
+    color: #cbd5e1;
+    padding: 8px 10px;
+    border-radius: 4px;
+    font-size: 13px;
+
+    &:hover { background: #1f2937; text-decoration: none; }
+    &.active { background: #1e3a8a; color: #ffffff; }
+  }
+}
+
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.topbar {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+
+  .role {
+    color: var(--muted);
+    font-size: 12px;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+}
+
+.logout {
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 4px;
+  color: var(--text);
+  cursor: pointer;
+
+  &:hover { border-color: var(--accent); color: var(--accent); }
+}
+
+.content {
+  padding: 20px;
+  flex: 1;
+}

@@ -1,0 +1,90 @@
+# Local dev orchestration.
+#
+# Three services, nothing else: no Redis, no queue, no reverse proxy.
+# The backend does its own in-process scheduling via APScheduler (off by
+# default in compose — see SCHEDULER_ENABLED below).
+#
+# Ports exposed to the host:
+#   postgres -> 5432
+#   backend  -> 8000
+#   frontend -> 4200
+#
+# Volumes / bind mounts:
+#   backend:  ./backend -> /app           (hot reload via uvicorn --reload)
+#   frontend: ./frontend -> /app          (hot reload via ng serve)
+#             + anonymous /app/node_modules so the bind doesn't shadow the
+#             node_modules produced during the image build.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: or_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-opportunity_radar}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: or_backend
+    environment:
+      # App
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_HOST: 0.0.0.0
+      APP_PORT: "8000"
+      # DB — `postgres` is the service DNS name inside the compose network.
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-opportunity_radar}
+      # Auth
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me}
+      JWT_ALGORITHM: HS256
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "60"
+      # LLM
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-claude-haiku-4-5-20251001}
+      # Scheduler — OFF by default in local dev so uvicorn --reload doesn't
+      # fire a pipeline run on every file save. Flip to "true" when you
+      # want to exercise the scheduled path, or trigger manually via
+      # POST /pipeline/run.
+      SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-false}
+      PIPELINE_INTERVAL_MINUTES: ${PIPELINE_INTERVAL_MINUTES:-60}
+      TRIAL_DAYS: ${TRIAL_DAYS:-7}
+      # CORS for the Angular dev server running on the host.
+      CORS_ORIGINS: http://localhost:4200
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: or_frontend
+    environment:
+      # Watch files via polling — needed on macOS / Windows bind mounts.
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    command: npx ng serve --host 0.0.0.0 --port 4200 --poll 1000
+
+volumes:
+  pg_data:

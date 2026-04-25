@@ -1,0 +1,29 @@
+# Multi-stage production build.
+# Stage 1: build the Angular bundle with Node.
+# Stage 2: serve the bundle from nginx:alpine. No Node in the runtime image.
+
+# --- build ---
+FROM node:22-alpine AS build
+
+ENV NG_CLI_ANALYTICS=false \
+    CI=true
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci || npm install
+
+COPY . .
+RUN npx ng build --configuration production
+
+# --- runtime ---
+FROM nginx:1.27-alpine AS runtime
+
+# Angular's @angular/build outputs into dist/<project>/browser in v17+.
+COPY --from=build /app/dist/opportunity-radar-admin/browser /usr/share/nginx/html
+
+# SPA fallback config — every unknown path returns index.html so Angular
+# Router can handle it on the client.
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80

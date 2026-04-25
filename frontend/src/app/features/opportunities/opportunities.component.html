@@ -1,0 +1,75 @@
+<header class="page-head">
+  <div>
+    <h2>Opportunities</h2>
+    <p>Onaylanmış sinyaller.</p>
+  </div>
+  <div class="filters">
+    <select (change)="onTypeChange($any($event.target).value)">
+      <option value="">Tüm tipler</option>
+      @for (opt of signalTypes; track opt.value) {
+        <option [value]="opt.value" [selected]="signalType() === opt.value">
+          {{ opt.label }}
+        </option>
+      }
+    </select>
+    <button class="btn" type="button" (click)="reload()">Yenile</button>
+  </div>
+</header>
+
+@if (loading()) {
+  <div class="state">Yükleniyor…</div>
+} @else if (error(); as err) {
+  <div class="state error">{{ err }}</div>
+} @else if (items().length === 0) {
+  <div class="state muted">Kayıt yok.</div>
+} @else {
+  <table>
+    <thead>
+      <tr>
+        <th>Tip</th>
+        <th>Şirket / Konu</th>
+        <th>Lokasyon</th>
+        <th>Kaynak</th>
+        <th>Confidence</th>
+        <th>Tarih</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (op of items(); track op.signal_id) {
+        <tr>
+          <td><span class="chip">{{ op.signal_type }}</span></td>
+          <td>
+            <div class="primary">
+              {{ op.company_name || op.supplier_name || op.raw_title || '—' }}
+            </div>
+            @if (op.summary) {
+              <div class="muted small">{{ op.summary }}</div>
+            }
+          </td>
+          <td>{{ op.location || '—' }}</td>
+          <td>
+            <div>{{ op.source_name }}</div>
+            <div class="muted small">{{ op.source_type }}</div>
+          </td>
+          <td>{{ confidence(op.confidence) | number: '1.2-2' }}</td>
+          <td>{{ op.created_at | date: 'yyyy-MM-dd HH:mm' }}</td>
+          <td>
+            @if (op.raw_url) {
+              <a [href]="op.raw_url" target="_blank" rel="noopener">Kaynak</a>
+            }
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+
+  <footer class="pager">
+    <span class="muted">
+      Toplam {{ total() }} · Gösterilen {{ offset() + 1 }}–{{ offset() + items().length }}
+    </span>
+    <div class="spacer"></div>
+    <button type="button" (click)="prev()" [disabled]="offset() === 0">Önceki</button>
+    <button type="button" (click)="next()" [disabled]="offset() + limit >= total()">Sonraki</button>
+  </footer>
+}

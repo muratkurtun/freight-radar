@@ -1,0 +1,63 @@
+<header class="page-head">
+  <div>
+    <h2>Pipeline Runs</h2>
+    <p>Zamanlanmış ve manuel tetiklenmiş pipeline çalışmaları.</p>
+  </div>
+  <div class="filters">
+    <select (change)="onFilterChange($any($event.target).value)">
+      <option value="">Tüm statüler</option>
+      <option value="running">Running</option>
+      <option value="success">Success</option>
+      <option value="failed">Failed</option>
+    </select>
+    <button class="btn primary" type="button" (click)="trigger()" [disabled]="triggering()">
+      {{ triggering() ? 'Tetikleniyor…' : 'Manuel Tetikle' }}
+    </button>
+    <button class="btn" type="button" (click)="reload()">Yenile</button>
+  </div>
+</header>
+
+@if (info(); as msg) {
+  <div class="state success" style="margin-bottom: 12px;">{{ msg }}</div>
+}
+
+@if (loading()) {
+  <div class="state">Yükleniyor…</div>
+} @else if (error(); as err) {
+  <div class="state error">{{ err }}</div>
+} @else if (items().length === 0) {
+  <div class="state muted">Kayıt yok.</div>
+} @else {
+  <table>
+    <thead>
+      <tr>
+        <th>Statü</th>
+        <th>Başlangıç</th>
+        <th>Süre</th>
+        <th>Collected</th>
+        <th>New</th>
+        <th>Signals</th>
+        <th>Hata</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (run of items(); track run.id) {
+        <tr>
+          <td><span [class]="statusClass(run.status)">{{ run.status }}</span></td>
+          <td>{{ run.started_at | date: 'yyyy-MM-dd HH:mm:ss' }}</td>
+          <td>{{ duration(run) }}</td>
+          <td>{{ run.items_collected }}</td>
+          <td>{{ run.items_new }}</td>
+          <td>{{ run.signals_detected }}</td>
+          <td class="error-cell">
+            @if (run.error_message) {
+              <span class="muted small" [title]="run.error_message">{{ truncate(run.error_message) }}</span>
+            } @else {
+              —
+            }
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}

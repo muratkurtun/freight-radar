@@ -1,0 +1,22 @@
+<div class="trial-wrap">
+  <div class="trial-card">
+    <div class="pill">Planı Yükselt</div>
+    <h1>Plan seçimi yakında</h1>
+    <p class="lead">
+      Şu anda self-serve ödeme açık değil. Planınızı aktive etmek veya bir
+      fiyat teklifi almak için bizimle iletişime geçin.
+    </p>
+
+    <ul class="contact">
+      <li>📧 <a href="mailto:sales@opportunityradar.com">sales&#64;opportunityradar.com</a></li>
+    </ul>
+
+    <div class="actions">
+      @if (store.isTrialExpired()) {
+        <a routerLink="/trial-expired" class="btn ghost">Geri Dön</a>
+      } @else {
+        <a routerLink="/opportunities" class="btn ghost">Uygulamaya Dön</a>
+      }
+    </div>
+  </div>
+</div>

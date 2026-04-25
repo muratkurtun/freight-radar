@@ -1,0 +1,22 @@
+<div class="trial-wrap">
+  <div class="trial-card">
+    <div class="pill">Deneme Sürümü</div>
+    <h1>Hoş geldin{{ user()?.full_name ? ', ' + user()?.full_name : '' }} 👋</h1>
+    <p class="lead">
+      Opportunity Radar hesabın hazır. Önümüzdeki
+      <strong>{{ days() ?? 7 }} gün</strong> boyunca tüm özelliklere sınırsız
+      erişimin var.
+    </p>
+
+    <ul class="steps">
+      <li><strong>1.</strong> Kaynak ekle (haber sitesi, iş ilanı, şirket web sitesi)</li>
+      <li><strong>2.</strong> Pipeline otomatik çalışsın, sinyaller onaylanmak üzere kuyruğa düşsün</li>
+      <li><strong>3.</strong> Onaylanan sinyaller <em>Opportunities</em> ekranında</li>
+    </ul>
+
+    <div class="actions">
+      <a routerLink="/opportunities" class="btn primary">Uygulamaya Git</a>
+      <a routerLink="/upgrade" class="btn ghost">Planları Gör</a>
+    </div>
+  </div>
+</div>

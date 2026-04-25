@@ -1,0 +1,409 @@
+"""Pipeline orchestration layer.
+
+Responsibilities:
+    collect -> persist raw -> prefilter -> AI verify -> map -> persist signal
+    (pending_review) -> close pipeline_run
+
+This module is orchestration only. It must not contain HTTP parsing,
+SQL, prompt engineering, or LLM calls — those live in the collectors,
+repositories and detectors respectively. A rewrite of this file should
+leave those layers untouched.
+
+Failure isolation
+-----------------
+Three failure scopes, from outer to inner:
+
+* Tenant-level: a single tenant blowing up (e.g. DB connection lost) is
+  caught by `run_pipeline_for_all_active_tenants` so other tenants keep
+  running.
+* Source-level: a collector crash or a DB error while writing the run
+  row marks that PipelineRun FAILED and moves on to the next source.
+* Item-level: per-item detection runs inside a SAVEPOINT so one bad raw
+  item (LLM 500, JSON parse error, etc.) can't roll back signals already
+  persisted from earlier items in the same source run. The item stays
+  `processed_at IS NULL` so it can be retried later.
+"""
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from uuid import UUID
+
+from sqlalchemy.orm import Session
+
+from app.collectors.registry import get_collector
+from app.core.hashing import content_hash, signal_hash
+from app.core.logging import get_logger
+from app.detectors.candidate_detector import detect_candidate_signals
+from app.detectors.signal_detector import SignalDetector
+from app.domain.enums import PipelineRunStatus, ReviewStatus
+from app.domain.models import DetectedSignal, PipelineRun, RawSourceItem, Source
+from app.domain.types import SignalResult, SourceItem
+from app.repositories.pipeline_runs import PipelineRunRepository
+from app.repositories.raw_items import RawItemRepository
+from app.repositories.signals import SignalRepository
+from app.repositories.sources import SourceRepository
+from app.repositories.tenants import TenantRepository
+
+logger = get_logger(__name__)
+
+
+@dataclass(slots=True, kw_only=True, frozen=True)
+class SourceRunSummary:
+    """Detached summary of one PipelineRun, safe to hand back to callers
+    after the DB session is closed."""
+
+    source_id: UUID
+    run_id: UUID
+    status: PipelineRunStatus
+    collected_item_count: int
+    inserted_signal_count: int
+    failed_item_count: int
+    error_message: str | None
+
+
+@dataclass(slots=True, kw_only=True, frozen=True)
+class TenantPipelineSummary:
+    """Aggregated result of running the pipeline for every active source
+    of a single tenant."""
+
+    tenant_id: UUID
+    started_at: datetime
+    finished_at: datetime
+    source_run_count: int
+    succeeded_run_count: int
+    failed_run_count: int
+    collected_item_count: int
+    inserted_signal_count: int
+    failed_item_count: int
+    source_runs: list[SourceRunSummary]
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class PipelineService:
+    """Tenant-scoped pipeline orchestrator.
+
+    One instance per tenant per DB session. Instantiates its own
+    repositories from the shared session; the caller owns the session
+    lifecycle."""
+
+    def __init__(self, db: Session, tenant_id: UUID, *, detector: SignalDetector | None = None):
+        self.db = db
+        self.tenant_id = tenant_id
+        self.sources = SourceRepository(db, tenant_id)
+        self.raws = RawItemRepository(db, tenant_id)
+        self.signals = SignalRepository(db, tenant_id)
+        self.runs = PipelineRunRepository(db, tenant_id)
+        self._detector_factory = lambda: detector or SignalDetector()
+
+    # ------------------------------------------------------------------
+    # public entry points
+    # ------------------------------------------------------------------
+
+    def run_for_tenant(self) -> TenantPipelineSummary:
+        """Run the pipeline for every active source of this tenant.
+
+        Per-source failures are recorded as FAILED PipelineRun rows and
+        do not abort the tenant run; they surface in the summary."""
+        started_at = _utcnow()
+        active_sources = self.sources.list_active()
+        logger.info(
+            "Tenant pipeline started tenant=%s active_sources=%d",
+            self.tenant_id,
+            len(active_sources),
+        )
+
+        summaries: list[SourceRunSummary] = [
+            self._run_and_summarize(source) for source in active_sources
+        ]
+
+        finished_at = _utcnow()
+        summary = TenantPipelineSummary(
+            tenant_id=self.tenant_id,
+            started_at=started_at,
+            finished_at=finished_at,
+            source_run_count=len(summaries),
+            succeeded_run_count=sum(
+                1 for s in summaries if s.status == PipelineRunStatus.SUCCESS
+            ),
+            failed_run_count=sum(
+                1 for s in summaries if s.status == PipelineRunStatus.FAILED
+            ),
+            collected_item_count=sum(s.collected_item_count for s in summaries),
+            inserted_signal_count=sum(s.inserted_signal_count for s in summaries),
+            failed_item_count=sum(s.failed_item_count for s in summaries),
+            source_runs=summaries,
+        )
+        logger.info(
+            "Tenant pipeline finished tenant=%s runs=%d ok=%d failed=%d "
+            "collected=%d signals=%d item_errors=%d",
+            self.tenant_id,
+            summary.source_run_count,
+            summary.succeeded_run_count,
+            summary.failed_run_count,
+            summary.collected_item_count,
+            summary.inserted_signal_count,
+            summary.failed_item_count,
+        )
+        return summary
+
+    def run_for_source(self, source_id: UUID) -> SourceRunSummary:
+        source = self.sources.get_or_404(source_id)
+        return self._run_and_summarize(source)
+
+    # ------------------------------------------------------------------
+    # per-source orchestration
+    # ------------------------------------------------------------------
+
+    def _run_and_summarize(self, source: Source) -> SourceRunSummary:
+        run = PipelineRun(tenant_id=self.tenant_id, source_id=source.id)
+        self.runs.add(run)
+        self.db.commit()
+
+        logger.info(
+            "Source run started tenant=%s source=%s run=%s",
+            self.tenant_id,
+            source.id,
+            run.id,
+        )
+
+        collected_item_count = 0
+        items_new = 0
+        inserted_signal_count = 0
+        failed_item_count = 0
+
+        try:
+            collector = get_collector(source.source_type)
+            collected = collector.collect(source)
+            collected_item_count = len(collected)
+
+            new_items = self._persist_new_items(source, collected, run.id)
+            items_new = len(new_items)
+
+            if new_items:
+                detector = self._detector_factory()
+                inserted_signal_count, failed_item_count = self._detect_and_persist(
+                    source, new_items, detector
+                )
+
+            self.runs.mark_finished(
+                run,
+                status=PipelineRunStatus.SUCCESS,
+                items_collected=collected_item_count,
+                items_new=items_new,
+                signals_detected=inserted_signal_count,
+            )
+            self.db.commit()
+
+            logger.info(
+                "Source run finished tenant=%s source=%s run=%s "
+                "collected=%d new=%d signals=%d item_errors=%d",
+                self.tenant_id,
+                source.id,
+                run.id,
+                collected_item_count,
+                items_new,
+                inserted_signal_count,
+                failed_item_count,
+            )
+
+            return SourceRunSummary(
+                source_id=source.id,
+                run_id=run.id,
+                status=PipelineRunStatus.SUCCESS,
+                collected_item_count=collected_item_count,
+                inserted_signal_count=inserted_signal_count,
+                failed_item_count=failed_item_count,
+                error_message=None,
+            )
+        except Exception as exc:
+            logger.exception(
+                "Source run failed tenant=%s source=%s run=%s",
+                self.tenant_id,
+                source.id,
+                run.id,
+            )
+            self.db.rollback()
+            run = self.db.merge(run)
+            error_message = str(exc)[:2000]
+            self.runs.mark_finished(
+                run,
+                status=PipelineRunStatus.FAILED,
+                items_collected=collected_item_count,
+                items_new=items_new,
+                signals_detected=inserted_signal_count,
+                error_message=error_message,
+            )
+            self.db.commit()
+            return SourceRunSummary(
+                source_id=source.id,
+                run_id=run.id,
+                status=PipelineRunStatus.FAILED,
+                collected_item_count=collected_item_count,
+                inserted_signal_count=inserted_signal_count,
+                failed_item_count=failed_item_count,
+                error_message=error_message,
+            )
+
+    # ------------------------------------------------------------------
+    # stage helpers
+    # ------------------------------------------------------------------
+
+    def _persist_new_items(
+        self, source: Source, collected: list[SourceItem], run_id: UUID
+    ) -> list[RawSourceItem]:
+        new_items: list[RawSourceItem] = []
+        for dto in collected:
+            item = RawSourceItem(
+                tenant_id=self.tenant_id,
+                source_id=source.id,
+                pipeline_run_id=run_id,
+                external_id=dto.external_id,
+                url=dto.url,
+                title=dto.title,
+                content=dto.content,
+                content_hash=content_hash(title=dto.title, content=dto.content),
+                published_at=dto.published_at,
+            )
+            inserted = self.raws.insert_if_not_exists(item)
+            if inserted is not None:
+                new_items.append(inserted)
+        if new_items:
+            self.db.commit()
+        return new_items
+
+    def _detect_and_persist(
+        self,
+        source: Source,
+        items: list[RawSourceItem],
+        detector: SignalDetector,
+    ) -> tuple[int, int]:
+        """Returns (inserted_signal_count, failed_item_count).
+
+        Each item is wrapped in a SAVEPOINT so a failure on one item
+        (LLM error, JSON parse error, integrity error, ...) rolls back
+        only that item's partial writes and leaves earlier signals
+        intact. Failed items keep processed_at NULL so a later run can
+        retry them."""
+        inserted = 0
+        failed = 0
+        for item in items:
+            try:
+                with self.db.begin_nested():
+                    if self._detect_one(source, item, detector):
+                        inserted += 1
+                    self.raws.mark_processed(item)
+            except Exception:
+                failed += 1
+                logger.exception(
+                    "Item detection failed tenant=%s source=%s item=%s",
+                    self.tenant_id,
+                    source.id,
+                    item.id,
+                )
+        self.db.commit()
+        return inserted, failed
+
+    def _detect_one(
+        self, source: Source, item: RawSourceItem, detector: SignalDetector
+    ) -> bool:
+        """Prefilter + LLM verify + map + persist for one raw item.
+
+        Returns True only when a NEW signal row was inserted. Prefilter
+        misses, LLM non-signals, and duplicate signal_hash hits all
+        return False without raising."""
+        candidates = detect_candidate_signals(
+            source_type=source.source_type,
+            title=item.title,
+            content=item.content,
+        )
+        if not candidates:
+            logger.debug("Prefilter miss item=%s", item.id)
+            return False
+
+        logger.debug(
+            "Prefilter hit item=%s types=%s",
+            item.id,
+            [c.signal_type.value for c in candidates],
+        )
+        result = detector.detect(
+            source_type=source.source_type,
+            title=item.title,
+            url=item.url,
+            content=item.content,
+            candidate_hints=[c.signal_type for c in candidates],
+        )
+        if not result.is_signal:
+            return False
+        return self._persist_signal(item, result)
+
+    def _persist_signal(self, item: RawSourceItem, result: SignalResult) -> bool:
+        """Insert a detected_signals row in pending_review state.
+
+        Returns False when an existing signal shares the same
+        signal_hash (same type + same subject) for this tenant — the
+        duplicate is silently dropped. The UNIQUE(tenant_id, signal_hash)
+        constraint is the authoritative guard; this pre-check just
+        avoids the IntegrityError on the common case."""
+        assert result.signal_type is not None  # guarded by is_signal
+        shash = signal_hash(
+            signal_type=result.signal_type.value,
+            company_name=result.company_name,
+            location=result.location,
+            role_title=result.role_title,
+            supplier_name=result.supplier_name,
+        )
+        if self.signals.find_by_signal_hash(shash) is not None:
+            logger.debug(
+                "Duplicate signal skipped tenant=%s item=%s hash=%s",
+                self.tenant_id,
+                item.id,
+                shash,
+            )
+            return False
+
+        signal = DetectedSignal(
+            tenant_id=self.tenant_id,
+            raw_source_item_id=item.id,
+            signal_type=result.signal_type.value,
+            confidence=result.confidence,
+            signal_hash=shash,
+            company_name=result.company_name,
+            location=result.location,
+            role_title=result.role_title,
+            supplier_name=result.supplier_name,
+            summary=result.summary,
+            extra=result.extra,
+            prompt_version=result.prompt_version,
+            review_status=ReviewStatus.PENDING_REVIEW.value,
+        )
+        self.signals.add(signal)
+        return True
+
+
+# ----------------------------------------------------------------------
+# module-level entry points (preferred callers from scheduler / scripts)
+# ----------------------------------------------------------------------
+
+
+def run_pipeline_for_tenant(db: Session, tenant_id: UUID) -> TenantPipelineSummary:
+    """Run the pipeline for a single tenant across all its active sources."""
+    return PipelineService(db, tenant_id).run_for_tenant()
+
+
+def run_pipeline_for_all_active_tenants(db: Session) -> list[TenantPipelineSummary]:
+    """Run the pipeline for every active tenant sequentially.
+
+    A crash at the tenant level (e.g. session corruption) is logged and
+    skipped so other tenants still get processed. The returned list only
+    contains summaries for tenants whose run completed."""
+    tenants = TenantRepository(db).list_active()
+    summaries: list[TenantPipelineSummary] = []
+    for tenant in tenants:
+        try:
+            summaries.append(run_pipeline_for_tenant(db, tenant.id))
+        except Exception:
+            logger.exception("Tenant pipeline failed tenant=%s", tenant.id)
+            db.rollback()
+    return summaries

@@ -1,0 +1,89 @@
+<header class="page-head">
+  <div>
+    <h2>Pending Reviews</h2>
+    <p>LLM tarafından işaretlenmiş, henüz karar verilmemiş sinyaller.</p>
+  </div>
+  <div class="filters">
+    <button class="btn" type="button" (click)="reload()">Yenile</button>
+  </div>
+</header>
+
+@if (loading()) {
+  <div class="state">Yükleniyor…</div>
+} @else if (error(); as err) {
+  <div class="state error">{{ err }}</div>
+} @else if (items().length === 0) {
+  <div class="state muted">Onay bekleyen kayıt yok.</div>
+} @else {
+  <table>
+    <thead>
+      <tr>
+        <th>Tip</th>
+        <th>Konu</th>
+        <th>Confidence</th>
+        <th>Oluşturuldu</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (s of items(); track s.id) {
+        <tr>
+          <td><span class="chip">{{ s.signal_type }}</span></td>
+          <td>
+            <div class="primary">
+              {{ s.company_name || s.supplier_name || '—' }}
+            </div>
+            @if (s.summary) {
+              <div class="muted small">{{ s.summary }}</div>
+            }
+            @if (s.location || s.role_title) {
+              <div class="muted small">
+                @if (s.location) { <span>{{ s.location }}</span> }
+                @if (s.location && s.role_title) { <span> · </span> }
+                @if (s.role_title) { <span>{{ s.role_title }}</span> }
+              </div>
+            }
+          </td>
+          <td>{{ confidence(s.confidence) | number: '1.2-2' }}</td>
+          <td>{{ s.created_at | date: 'yyyy-MM-dd HH:mm' }}</td>
+          <td class="actions">
+            <button class="btn primary" type="button" (click)="approve(s.id)"
+                    [disabled]="decisionLoading()">Onayla</button>
+            <button class="btn" type="button" (click)="openReject(s.id)"
+                    [disabled]="decisionLoading()">Reddet</button>
+          </td>
+        </tr>
+        @if (rejectingId() === s.id) {
+          <tr class="reject-row">
+            <td colspan="5">
+              <div class="reject-form">
+                <textarea
+                  rows="2"
+                  placeholder="Red sebebi (zorunlu)"
+                  [ngModel]="rejectReason()"
+                  (ngModelChange)="rejectReason.set($event)"
+                ></textarea>
+                <div class="reject-actions">
+                  <button class="btn ghost" type="button" (click)="cancelReject()">Vazgeç</button>
+                  <button
+                    class="btn danger"
+                    type="button"
+                    (click)="confirmReject(s.id)"
+                    [disabled]="!rejectReason().trim() || decisionLoading()"
+                  >Reddet</button>
+                </div>
+              </div>
+            </td>
+          </tr>
+        }
+      }
+    </tbody>
+  </table>
+
+  <footer class="pager">
+    <span class="muted">Toplam {{ total() }}</span>
+    <div class="spacer"></div>
+    <button type="button" (click)="prev()" [disabled]="offset() === 0">Önceki</button>
+    <button type="button" (click)="next()" [disabled]="offset() + limit >= total()">Sonraki</button>
+  </footer>
+}

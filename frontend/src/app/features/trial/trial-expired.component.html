@@ -1,0 +1,22 @@
+<div class="trial-wrap">
+  <div class="trial-card expired">
+    <div class="pill danger">Deneme Süresi Doldu</div>
+    <h1>Deneme süren sona erdi</h1>
+    <p class="lead">
+      7 günlük deneme süren sona erdi. Uygulamaya erişime devam etmek için
+      planı yükseltmen gerekiyor. Soruların için ekibimizle iletişime
+      geçebilirsin.
+    </p>
+
+    @if (store.currentUser(); as user) {
+      <div class="account muted small">
+        Hesap: {{ user.email }} · {{ user.full_name || '—' }}
+      </div>
+    }
+
+    <div class="actions">
+      <a routerLink="/upgrade" class="btn primary">Planı Yükselt</a>
+      <button type="button" class="btn ghost" (click)="logout()">Çıkış Yap</button>
+    </div>
+  </div>
+</div>

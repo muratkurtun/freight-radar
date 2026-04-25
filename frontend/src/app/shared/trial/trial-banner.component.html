@@ -1,0 +1,17 @@
+@if (visible()) {
+  <div class="trial-banner">
+    <span class="icon">•</span>
+    <span class="text">
+      @if (days() === null) {
+        Deneme sürümü aktif.
+      } @else if (days()! <= 0) {
+        Deneme süreniz bugün sona eriyor.
+      } @else if (days() === 1) {
+        Deneme süreniz <strong>1 gün</strong> sonra sona eriyor.
+      } @else {
+        Deneme süreniz <strong>{{ days() }} gün</strong> sonra sona eriyor.
+      }
+    </span>
+    <a routerLink="/upgrade" class="cta">Planı Yükselt</a>
+  </div>
+}

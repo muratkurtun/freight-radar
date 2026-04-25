@@ -1,0 +1,25 @@
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">Opportunity Radar</div>
+    <nav>
+      @for (item of navItems(); track item.path) {
+        <a [routerLink]="item.path" routerLinkActive="active">{{ item.label }}</a>
+      }
+    </nav>
+  </aside>
+  <main>
+    <app-trial-banner />
+    <header class="topbar">
+      <div class="user">
+        @if (store.currentUser(); as user) {
+          <span class="name">{{ user.full_name || user.email }}</span>
+          <span class="role">{{ user.role }}</span>
+        }
+        <button class="logout" type="button" (click)="logout()">Çıkış</button>
+      </div>
+    </header>
+    <section class="content">
+      <router-outlet />
+    </section>
+  </main>
+</div>
