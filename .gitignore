@@ -1,0 +1,41 @@
+# 🔐 ENV
+.env
+.env.*
+*.env
+
+# 🐍 Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+
+# 📦 Node / Angular
+node_modules/
+dist/
+.angular/
+.cache/
+
+# 🐳 Docker
+*.log
+
+# 💻 OS
+.DS_Store
+Thumbs.db
+
+# 🧠 IDE
+.vscode/
+.idea/
+
+# 🔑 SSH / Keys
+*.pem
+*.key
+
+# 🗄️ Database / backup
+*.sql
+*.dump
+
+# 🔥 Misc
+coverage/
+tmp/
