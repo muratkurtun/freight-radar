@@ -55,7 +55,7 @@ export const trialGuard: CanActivateFn = (route, state) => {
 
   if (base === false) return false;
   if (base === true) return check(true);
-  return base.pipe(map(check));
+  return (base as Observable<boolean>).pipe(map(check));
 };
 
 /** Admin + authed + not expired. */

@@ -19,8 +19,10 @@ RUN npx ng build --configuration production
 # --- runtime ---
 FROM nginx:1.27-alpine AS runtime
 
-# Angular's @angular/build outputs into dist/<project>/browser in v17+.
-COPY --from=build /app/dist/opportunity-radar-admin/browser /usr/share/nginx/html
+# Angular's @angular/build outputs into dist/browser when angular.json
+# uses a string outputPath ("dist"). If you switch to the object form
+# ({ "base": "dist/<name>" }), update this path accordingly.
+COPY --from=build /app/dist/browser /usr/share/nginx/html
 
 # SPA fallback config — every unknown path returns index.html so Angular
 # Router can handle it on the client.
