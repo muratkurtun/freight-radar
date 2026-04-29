@@ -63,6 +63,11 @@ export const routes: Routes = [
         loadChildren: () =>
           import('./features/pipeline/pipeline.routes').then((m) => m.PIPELINE_ROUTES),
       },
+      {
+        path: 'sources',
+        loadChildren: () =>
+          import('./features/sources/sources.routes').then((m) => m.SOURCES_ROUTES),
+      },
     ],
   },
 

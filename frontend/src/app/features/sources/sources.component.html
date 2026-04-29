@@ -1,0 +1,129 @@
+<header class="page-head">
+  <div>
+    <h2>Sources</h2>
+    <p>Pipeline'ın taradığı kaynakları yönet. Aktif kaynak yoksa pipeline 0 item toplar.</p>
+  </div>
+  <div class="filters">
+    @if (canManage()) {
+      <button class="btn primary" type="button" (click)="runPipeline()" [disabled]="triggering()">
+        {{ triggering() ? 'Tetikleniyor…' : 'Run Pipeline Now' }}
+      </button>
+      <button class="btn" type="button" (click)="startCreate()" [disabled]="formOpen()">
+        + Add Source
+      </button>
+    }
+    <button class="btn" type="button" (click)="reload()">Yenile</button>
+  </div>
+</header>
+
+@if (info(); as msg) {
+  <div class="state success" style="margin-bottom: 12px;">{{ msg }}</div>
+}
+
+@if (formOpen() && canManage()) {
+  <form class="form-card" [formGroup]="form" (ngSubmit)="submit()">
+    <h3>{{ editingId() ? 'Kaynağı Düzenle' : 'Yeni Kaynak' }}</h3>
+
+    <div class="form-grid">
+      <label>
+        <span>Source Type</span>
+        <select formControlName="source_type">
+          @for (opt of typeOptions; track opt.value) {
+            <option [value]="opt.value">{{ opt.label }}</option>
+          }
+        </select>
+        @if (editingId()) {
+          <small class="muted">Tip oluşturma sonrası değiştirilemez.</small>
+        }
+        @if (hasError('source_type')) {
+          <small class="field-error">Tip seçilmeli.</small>
+        }
+      </label>
+
+      <label>
+        <span>Name</span>
+        <input type="text" formControlName="name" maxlength="200" placeholder="ör. TechCrunch RSS" />
+        @if (hasError('name')) {
+          <small class="field-error">Name zorunludur.</small>
+        }
+      </label>
+
+      <label class="full">
+        <span>URL</span>
+        <input type="url" formControlName="url" maxlength="1000" placeholder="https://example.com/feed" />
+        @if (hasError('url')) {
+          <small class="field-error">Geçerli bir http/https URL'si girin.</small>
+        }
+      </label>
+
+      <label class="checkbox">
+        <input type="checkbox" formControlName="is_active" />
+        <span>Active</span>
+      </label>
+    </div>
+
+    @if (error(); as err) {
+      <div class="state error">{{ err }}</div>
+    }
+
+    <div class="form-actions">
+      <button class="btn" type="button" (click)="cancelForm()" [disabled]="saving()">İptal</button>
+      <button class="btn primary" type="submit" [disabled]="saving()">
+        {{ saving() ? 'Kaydediliyor…' : (editingId() ? 'Kaydet' : 'Oluştur') }}
+      </button>
+    </div>
+  </form>
+}
+
+@if (loading()) {
+  <div class="state">Yükleniyor…</div>
+} @else if (error() && !formOpen()) {
+  <div class="state error">{{ error() }}</div>
+} @else if (items().length === 0) {
+  <div class="state muted">No sources configured yet. Add your first source to start collecting opportunities.</div>
+} @else {
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>URL</th>
+        <th>Status</th>
+        <th>Created</th>
+        @if (canManage()) {
+          <th class="actions-col">Actions</th>
+        }
+      </tr>
+    </thead>
+    <tbody>
+      @for (s of items(); track s.id) {
+        <tr [class.row-busy]="busyRowId() === s.id">
+          <td>{{ s.name }}</td>
+          <td>{{ typeLabel(s.source_type) }}</td>
+          <td class="url-cell">
+            <a [href]="s.url" target="_blank" rel="noopener noreferrer" [title]="s.url">{{ s.url }}</a>
+          </td>
+          <td>
+            <span [class]="s.is_active ? 'chip success' : 'chip'">
+              {{ s.is_active ? 'Active' : 'Passive' }}
+            </span>
+          </td>
+          <td>{{ s.created_at | date: 'yyyy-MM-dd HH:mm' }}</td>
+          @if (canManage()) {
+            <td class="row-actions">
+              <button class="btn small" type="button" (click)="toggleActive(s)" [disabled]="busyRowId() === s.id">
+                {{ s.is_active ? 'Deactivate' : 'Activate' }}
+              </button>
+              <button class="btn small" type="button" (click)="startEdit(s)" [disabled]="busyRowId() === s.id">
+                Edit
+              </button>
+              <button class="btn small danger" type="button" (click)="remove(s)" [disabled]="busyRowId() === s.id">
+                Delete
+              </button>
+            </td>
+          }
+        </tr>
+      }
+    </tbody>
+  </table>
+}
