@@ -22,7 +22,7 @@ Lifecycle
 from __future__ import annotations
 
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 
 from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED, JobExecutionEvent
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -67,7 +67,7 @@ def start_scheduler() -> None:
             trigger=IntervalTrigger(minutes=settings.pipeline_interval_minutes),
             id=PIPELINE_JOB_ID,
             replace_existing=True,
-            next_run_time=datetime.utcnow(),  # also fire once immediately on boot
+            next_run_time=datetime.now(timezone.utc),  # also fire once immediately on boot
         )
         scheduler.add_listener(_on_job_event, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
         scheduler.start()

@@ -50,8 +50,8 @@ services:
       JWT_ALGORITHM: HS256
       JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "60"
       # LLM
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      LLM_MODEL: ${LLM_MODEL:-claude-haiku-4-5-20251001}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4.1-mini}
       # Scheduler — OFF by default in local dev so uvicorn --reload doesn't
       # fire a pipeline run on every file save. Flip to "true" when you
       # want to exercise the scheduled path, or trigger manually via

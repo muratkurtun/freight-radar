@@ -260,7 +260,7 @@ Next steps — run as the '${DEPLOY_USER}' user, not root:
 
   cd ${APP_DIR}
   git clone <repo-url> .
-  cp .env.example .env && nano .env        # fill DOMAIN, JWT_SECRET, ANTHROPIC_API_KEY, ...
+  cp .env.example .env && nano .env        # fill DOMAIN, JWT_SECRET, OPENAI_API_KEY, ...
   chmod 600 .env
 
   # Substitute the real domain into the nginx site config (one-off):

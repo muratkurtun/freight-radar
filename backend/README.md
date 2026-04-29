@@ -12,7 +12,7 @@ pip install -e ".[dev]"
 cp .env.example .env
 ```
 
-Edit `.env` and set `DATABASE_URL`, `JWT_SECRET`, `ANTHROPIC_API_KEY`.
+Edit `.env` and set `DATABASE_URL`, `JWT_SECRET`, `OPENAI_API_KEY`.
 
 ## Database
 

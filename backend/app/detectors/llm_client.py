@@ -1,6 +1,6 @@
 import json
 
-from anthropic import Anthropic
+from openai import OpenAI
 
 from app.config import get_settings
 from app.core.errors import AppError
@@ -10,14 +10,14 @@ logger = get_logger(__name__)
 
 
 class LLMClient:
-    """Thin wrapper around the Anthropic Messages API for JSON-only outputs."""
+    """Thin wrapper around the OpenAI Chat Completions API for JSON-only outputs."""
 
     def __init__(self, *, api_key: str | None = None, model: str | None = None):
         settings = get_settings()
-        key = api_key or settings.anthropic_api_key
+        key = api_key or settings.openai_api_key
         if not key:
-            raise AppError("ANTHROPIC_API_KEY is not configured", code="llm_not_configured")
-        self._client = Anthropic(api_key=key)
+            raise AppError("OPENAI_API_KEY is not configured", code="llm_not_configured")
+        self._client = OpenAI(api_key=key)
         self._model = model or settings.llm_model
 
     def complete_json(
@@ -28,14 +28,17 @@ class LLMClient:
         max_tokens: int = 1024,
         temperature: float = 0.0,
     ) -> dict:
-        response = self._client.messages.create(
+        response = self._client.chat.completions.create(
             model=self._model,
             max_tokens=max_tokens,
             temperature=temperature,
-            system=system,
-            messages=[{"role": "user", "content": user}],
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
         )
-        text = "".join(block.text for block in response.content if getattr(block, "type", None) == "text")
+        text = response.choices[0].message.content or ""
         return _parse_json(text)
 
 

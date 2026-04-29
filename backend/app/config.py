@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60
 
-    anthropic_api_key: str | None = None
-    llm_model: str = "claude-haiku-4-5-20251001"
+    openai_api_key: str | None = None
+    llm_model: str = "gpt-4.1-mini"
 
     scheduler_enabled: bool = True
     pipeline_interval_minutes: int = 60

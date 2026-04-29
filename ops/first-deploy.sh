@@ -20,7 +20,7 @@
 #   REPO_URL=git@github.com:you/opportunity-radar.git \
 #   DOMAIN=opportunityradar.com \
 #   LETSENCRYPT_EMAIL=you@opportunityradar.com \
-#   ANTHROPIC_API_KEY=sk-ant-... \
+#   OPENAI_API_KEY=sk-... \
 #   bash ~/first-deploy.sh
 #
 # Re-running is safe: repo pulls, secrets re-used, migrations are
@@ -34,7 +34,7 @@ set -euo pipefail
 REPO_URL="${REPO_URL:?REPO_URL is required (git@... or https://...)}"
 DOMAIN="${DOMAIN:?DOMAIN is required (e.g. opportunityradar.com)}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:?LETSENCRYPT_EMAIL is required}"
-ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
+OPENAI_API_KEY="${OPENAI_API_KEY:-}"
 
 APP_DIR="${APP_DIR:-/opt/opportunity-radar}"
 BACKUP_LOG="${BACKUP_LOG:-/var/log/or-backup.log}"
@@ -105,8 +105,8 @@ POSTGRES_DB=opportunity_radar
 JWT_SECRET=${JWT_SECRET}
 
 # --- LLM ---
-ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-LLM_MODEL=claude-haiku-4-5-20251001
+OPENAI_API_KEY=${OPENAI_API_KEY}
+LLM_MODEL=gpt-4.1-mini
 
 # --- Scheduler ---
 SCHEDULER_ENABLED=true
@@ -123,8 +123,8 @@ fi
 # Load .env into this shell so we can use $DOMAIN etc. below.
 set -a; . ./.env; set +a
 
-[[ -n "${ANTHROPIC_API_KEY:-}" ]] \
-    || warn "ANTHROPIC_API_KEY is empty — LLM verification will short-circuit to is_signal=false"
+[[ -n "${OPENAI_API_KEY:-}" ]] \
+    || warn "OPENAI_API_KEY is empty — LLM verification will short-circuit to is_signal=false"
 
 # ---------------------------------------------------------------------
 # 3. Nginx domain substitution (idempotent)

@@ -12,9 +12,11 @@ pydantic[email]>=2.7
 pydantic-settings>=2.3
 python-jose[cryptography]>=3.3
 passlib[bcrypt]>=1.7
+# passlib 1.7.x reads bcrypt.__about__.__version__, removed in bcrypt 4.1+
+bcrypt==4.0.1
 apscheduler>=3.10
 requests>=2.32
 beautifulsoup4>=4.12
 feedparser>=6.0
-anthropic>=0.39
+openai>=1.40
 python-multipart>=0.0.9

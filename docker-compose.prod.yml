@@ -41,7 +41,7 @@ services:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
       JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "60"
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
       LLM_MODEL: ${LLM_MODEL}
       # Single-worker deployment → scheduler is safe ON here. If you add
       # a second backend replica later, turn this OFF on the replicas.

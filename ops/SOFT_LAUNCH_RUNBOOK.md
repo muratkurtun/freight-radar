@@ -14,7 +14,7 @@
 | `<REPO_URL>` | Git URL, ör. `git@github.com:you/opportunity-radar.git` |
 | `<LE_EMAIL>` | Let's Encrypt email |
 | `<SERVER_IP>` | Hetzner Cloud server'ın public IP'si |
-| `<ANTHROPIC_API_KEY>` | Anthropic console'dan, soft launch'tan önce **hard limit ayarlı olmalı** |
+| `<OPENAI_API_KEY>` | OpenAI Platform console'dan, soft launch'tan önce **hard limit ayarlı olmalı** |
 | `<ADMIN_EMAIL>` / `<ADMIN_PASSWORD>` | İlk register'ı kimle yapacağın |
 
 `<DOMAIN>` DNS'inde A record `<SERVER_IP>`'ye, `www.<DOMAIN>` CNAME `<DOMAIN>`'e işaret etmeli. Soft launch'tan ≥30 dk önce DNS yayınla (TTL 300s öner).
@@ -219,8 +219,8 @@ JWT_ALGORITHM=HS256
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60
 
 # LLM
-ANTHROPIC_API_KEY=<ANTHROPIC_API_KEY>
-LLM_MODEL=claude-haiku-4-5-20251001
+OPENAI_API_KEY=<OPENAI_API_KEY>
+LLM_MODEL=gpt-4.1-mini
 
 # Scheduler — soft launch START: KAPALI. Manuel test sonrası adım 19'da aç.
 SCHEDULER_ENABLED=false
@@ -346,7 +346,7 @@ ssh deploy@<SERVER_IP>
 REPO_URL=<REPO_URL> \
 DOMAIN=<DOMAIN> \
 LETSENCRYPT_EMAIL=<LE_EMAIL> \
-ANTHROPIC_API_KEY=<ANTHROPIC_API_KEY> \
+OPENAI_API_KEY=<OPENAI_API_KEY> \
 bash ~/first-deploy.sh
 ```
 
@@ -597,25 +597,25 @@ docker compose -f docker-compose.prod.yml up -d --no-deps backend
 
 ## 20. AI API maliyet limitleri
 
-⚠ **Yol B'nin kritik bağımlılığı.** Kod tarafında hiçbir cap yok; tüm güvenlik Anthropic Console'da.
+⚠ **Yol B'nin kritik bağımlılığı.** Kod tarafında hiçbir cap yok; tüm güvenlik OpenAI Platform Console'da.
 
-**Anthropic Console (https://console.anthropic.com):**
+**OpenAI Platform (https://platform.openai.com):**
 
-1. **Billing → Usage limits:**
-   - **Hard limit:** $20/ay (soft launch için makul)
-   - **Soft limit (alert):** $10/ay → email gönderir
-   - Hard limit aşılırsa Anthropic **API'yi 429 ile kapatır**, fatura kontrol altında kalır
+1. **Settings → Billing → Limits:**
+   - **Hard limit (Monthly budget):** $20/ay (soft launch için makul)
+   - **Soft limit (Email alert threshold):** $10/ay → email gönderir
+   - Hard limit aşılırsa OpenAI **API'yi 429 ile kapatır**, fatura kontrol altında kalır
 
 2. **API key:** soft launch için **dedicated key** üret (tenant başına değil, bu deployment için tek key). Acil durumda `.env`'i değiştirip backend restart → 30 sn'de yeni key aktif.
 
-3. **Model pinning:** `LLM_MODEL=claude-haiku-4-5-20251001` — Haiku ucuz (~$0.25/M input token). Sonnet'e **YANLIŞLIKLA** geçmek (~10x maliyet) için model adını manuel kontrol et.
+3. **Model pinning:** `LLM_MODEL=gpt-4.1-mini` — mini ucuz tier. Daha pahalı modellere (`gpt-4.1`, `gpt-4o`) **YANLIŞLIKLA** geçmek için model adını manuel kontrol et.
 
-`.env`'deki uyarı satırlarını da hatırla — `MAX_ITEMS_PER_QUERY` ve `AI_DAILY_CALL_LIMIT` sadece dokümante intent. Real cap = Anthropic Console hard limit.
+`.env`'deki uyarı satırlarını da hatırla — `MAX_ITEMS_PER_QUERY` ve `AI_DAILY_CALL_LIMIT` sadece dokümante intent. Real cap = OpenAI Console hard limit.
 
 **Soft launch ilk 48 saat:**
 ```bash
 # Günde 1 kere bak — 2 dk işin
-open https://console.anthropic.com/settings/billing
+open https://platform.openai.com/usage
 # Daily cost: <$0.50 normal soft launch için.
 # >$2/gün → bir şey terslik var, scheduler'ı kapat ve incele.
 ```
@@ -680,7 +680,7 @@ $COMPOSE logs --since 1h backend | grep -iE 'error|exception|traceback'
 $COMPOSE logs --since 6h backend | grep -i 'tick\|pipeline'
 
 # Anthropic çağrı izi:
-$COMPOSE logs --since 6h backend | grep -i 'llm\|anthropic'
+$COMPOSE logs --since 6h backend | grep -i 'llm\|openai'
 
 # Nginx 5xx:
 $COMPOSE logs --since 1h nginx | grep -E ' 5[0-9]{2} '
@@ -788,7 +788,7 @@ Launch'tan **30 dakika önce** her satırın yanına ✓ at:
 - [ ] `pg_restore.sh` test DB'sine restore prova edildi
 - [ ] `crontab -l` → backup cron 03:00 var
 - [ ] Anthropic Console hard limit ≤ $20, soft alert $10
-- [ ] LLM_MODEL `claude-haiku-4-5-*` (Sonnet değil)
+- [ ] LLM_MODEL `gpt-4.1-mini` (daha pahalı modele kayma yok)
 
 ### İletişim / izleme
 - [ ] UptimeRobot monitor: `https://<DOMAIN>/api/health`, 5 dk interval, email alert
@@ -904,7 +904,7 @@ ssh deploy@<SERVER_IP>
 REPO_URL=<REPO_URL> \
 DOMAIN=<DOMAIN> \
 LETSENCRYPT_EMAIL=<LE_EMAIL> \
-ANTHROPIC_API_KEY=<ANTHROPIC_API_KEY> \
+OPENAI_API_KEY=<OPENAI_API_KEY> \
 bash ~/first-deploy.sh
 
 # 5. Smoke (sen):

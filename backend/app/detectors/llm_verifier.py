@@ -28,8 +28,9 @@ from __future__ import annotations
 import time
 from typing import Iterable
 
-from anthropic import APIError
+from openai import APIError
 
+from app.config import get_settings
 from app.core.errors import AppError
 from app.core.logging import get_logger
 from app.detectors.llm_client import LLMClient
@@ -68,8 +69,21 @@ class LlmVerifier:
         *,
         max_input_chars: int = MAX_INPUT_CHARS,
     ):
-        self._client = client or LLMClient()
         self._max_input_chars = max_input_chars
+        if client is not None:
+            self._client: LLMClient | None = client
+            self._disabled = False
+            return
+        # Explicit short-circuit: when no API key is configured, skip the
+        # LLM step entirely instead of letting LLMClient raise on every
+        # item. The pipeline treats the empty LlmOutput as "not a signal".
+        if not get_settings().openai_api_key:
+            self._client = None
+            self._disabled = True
+            logger.info("LLM verifier disabled (OPENAI_API_KEY not set)")
+            return
+        self._client = LLMClient()
+        self._disabled = False
 
     def verify(
         self,
@@ -80,6 +94,8 @@ class LlmVerifier:
         content: str,
         candidate_hints: Iterable[SignalType] | None = None,
     ) -> LlmOutput:
+        if self._disabled:
+            return LlmOutput(prompt_version=CURRENT_VERSION)
         truncated = _truncate(content, self._max_input_chars)
         hints = [s.value for s in candidate_hints] if candidate_hints else None
         user_prompt = build_user_prompt(
