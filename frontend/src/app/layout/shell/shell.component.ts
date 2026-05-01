@@ -23,6 +23,12 @@ export class ShellComponent {
 
   readonly navItems = computed<NavItem[]>(() => {
     const items: NavItem[] = [{ path: '/opportunities', label: 'Opportunities' }];
+    // Tenants pick targeting; the platform admin curates the source pool.
+    if (this.store.isPlatformAdmin()) {
+      items.push({ path: '/source-pool', label: 'Source Pool' });
+    } else {
+      items.push({ path: '/targeting', label: 'Targeting' });
+    }
     if (this.store.isAdmin()) {
       items.push(
         { path: '/reviews/pending', label: 'Pending Reviews' },

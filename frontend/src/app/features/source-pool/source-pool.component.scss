@@ -1,0 +1,175 @@
+.form-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 20px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  h3 { margin: 0; font-size: 15px; }
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    color: var(--muted);
+
+    &.full { grid-column: 1 / -1; }
+
+    &.checkbox {
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+
+      input { width: auto; }
+    }
+
+    input[type='text'],
+    input[type='url'],
+    input[type='number'],
+    select {
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #fff;
+      color: var(--text);
+
+      &:focus { outline: none; border-color: var(--accent); }
+      &:disabled { background: #f3f4f6; color: var(--muted); cursor: not-allowed; }
+    }
+
+    .field-error {
+      color: var(--danger);
+      font-size: 12px;
+    }
+  }
+}
+
+.tag-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tag-group-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+
+  .required {
+    color: var(--danger);
+    font-weight: 600;
+  }
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip-toggle {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+
+  &:hover:not(:disabled):not(.selected) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  &.selected {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.url-cell {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  a { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.actions-col { width: 1%; white-space: nowrap; }
+
+.btn.small {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.row-busy { opacity: 0.6; }
+
+// The list now has 14 columns (4 tag dimensions, Q/N/Lang, …). Let the
+// outer wrapper scroll horizontally instead of squeezing everything.
+.table-scroll {
+  overflow-x: auto;
+
+  table { min-width: 1400px; }
+}
+
+.tag-cell {
+  min-width: 140px;
+  max-width: 220px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.tag-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #eef2ff;
+  color: #3730a3;
+  border-radius: 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.btn.danger.ghost {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger);
+
+  &:hover:not(:disabled) {
+    background: var(--danger);
+    color: #fff;
+  }
+}

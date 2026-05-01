@@ -1,5 +1,11 @@
 import { Routes } from '@angular/router';
-import { adminGuard, authGuard, publicGuard, trialGuard } from './core/auth/auth.guard';
+import {
+  adminGuard,
+  authGuard,
+  platformAdminGuard,
+  publicGuard,
+  trialGuard,
+} from './core/auth/auth.guard';
 
 export const routes: Routes = [
   // --- PUBLIC ---
@@ -62,6 +68,17 @@ export const routes: Routes = [
         canActivate: [adminGuard],
         loadChildren: () =>
           import('./features/pipeline/pipeline.routes').then((m) => m.PIPELINE_ROUTES),
+      },
+      {
+        path: 'targeting',
+        loadChildren: () =>
+          import('./features/targeting/targeting.routes').then((m) => m.TARGETING_ROUTES),
+      },
+      {
+        path: 'source-pool',
+        canActivate: [platformAdminGuard],
+        loadChildren: () =>
+          import('./features/source-pool/source-pool.routes').then((m) => m.SOURCE_POOL_ROUTES),
       },
     ],
   },

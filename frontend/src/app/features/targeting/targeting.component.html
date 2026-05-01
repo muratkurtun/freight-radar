@@ -1,0 +1,55 @@
+<header class="page-head">
+  <div>
+    <h2>Targeting</h2>
+    <p>
+      Select the customer segments and signals you want to monitor.
+      Opportunity Radar will use the managed source pool automatically.
+    </p>
+  </div>
+  <div class="filters">
+    @if (canSave()) {
+      <button class="btn primary" type="button" (click)="save()" [disabled]="saving() || loading()">
+        {{ saving() ? 'Saving…' : 'Save Preferences' }}
+      </button>
+      <button class="btn" type="button" (click)="runPipeline()" [disabled]="triggering() || loading()">
+        {{ triggering() ? 'Starting…' : 'Run Pipeline Now' }}
+      </button>
+    }
+  </div>
+</header>
+
+@if (info(); as msg) {
+  <div class="state success" style="margin-bottom: 12px;">{{ msg }}</div>
+}
+@if (error(); as err) {
+  <div class="state error" style="margin-bottom: 12px;">{{ err }}</div>
+}
+
+@if (loading()) {
+  <div class="state">Loading…</div>
+} @else {
+  @if (!canSave()) {
+    <div class="state muted" style="margin-bottom: 16px;">
+      View only — ask a tenant admin to update targeting preferences.
+    </div>
+  }
+
+  @for (group of groups; track group.key) {
+    <section class="group-card">
+      <h3>{{ group.label }}</h3>
+      <div class="chips">
+        @for (opt of group.options; track opt.value) {
+          <button
+            type="button"
+            class="chip-toggle"
+            [class.selected]="isSelected(group.key, opt.value)"
+            [disabled]="!canSave()"
+            (click)="toggle(group.key, opt.value)"
+          >
+            {{ opt.label }}
+          </button>
+        }
+      </div>
+    </section>
+  }
+}

@@ -76,6 +76,25 @@ export const adminGuard: CanActivateFn = (route, state) => {
   return (base as Observable<boolean>).pipe(map(check));
 };
 
+/** Strictly platform_admin. Tenant admins are bounced to /opportunities.
+ *  Used for cross-tenant tooling like the platform Source Pool. */
+export const platformAdminGuard: CanActivateFn = (route, state) => {
+  const store = inject(AuthStore);
+  const router = inject(Router);
+
+  const base = trialGuard(route, state);
+  const check = (ok: boolean): boolean => {
+    if (!ok) return false;
+    if (store.isPlatformAdmin()) return true;
+    router.navigate(['/opportunities']);
+    return false;
+  };
+
+  if (base === false) return false;
+  if (base === true) return check(true);
+  return (base as Observable<boolean>).pipe(map(check));
+};
+
 /** /login + /register: bounce already-authed users straight into the app. */
 export const publicGuard: CanActivateFn = () => {
   const store = inject(AuthStore);

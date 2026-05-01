@@ -1,0 +1,195 @@
+<header class="page-head">
+  <div>
+    <h2>Source Pool</h2>
+    <p>Centrally curated sources matched to tenants by tag intersection.</p>
+  </div>
+  <div class="filters">
+    <button class="btn primary" type="button" (click)="startCreate()" [disabled]="formOpen()">
+      + Add Source
+    </button>
+    <button class="btn" type="button" (click)="reload()">Refresh</button>
+  </div>
+</header>
+
+@if (info(); as msg) {
+  <div class="state success" style="margin-bottom: 12px;">{{ msg }}</div>
+}
+
+@if (formOpen()) {
+  <form class="form-card" [formGroup]="form" (ngSubmit)="submit()">
+    <h3>{{ editingId() ? 'Edit Source' : 'New Source' }}</h3>
+
+    <div class="form-grid">
+      <label>
+        <span>Type</span>
+        <select formControlName="source_type">
+          @for (opt of typeOptions; track opt.value) {
+            <option [value]="opt.value">{{ opt.label }}</option>
+          }
+        </select>
+        @if (editingId()) {
+          <small class="muted">Type cannot be changed after creation.</small>
+        }
+      </label>
+
+      <label>
+        <span>Name</span>
+        <input type="text" formControlName="name" maxlength="200" placeholder="e.g. TechCrunch Logistics" />
+        @if (hasError('name')) {
+          <small class="field-error">Name is required.</small>
+        }
+      </label>
+
+      <label class="full">
+        <span>URL</span>
+        <input type="url" formControlName="url" maxlength="1000" placeholder="https://example.com/feed" />
+        @if (hasError('url')) {
+          <small class="field-error">Enter a valid http/https URL.</small>
+        }
+      </label>
+
+      <label>
+        <span>Language (ISO code, optional)</span>
+        <input type="text" formControlName="language" maxlength="10" placeholder="en" />
+      </label>
+
+      <label>
+        <span>Priority (lower runs first)</span>
+        <input type="number" formControlName="priority" min="0" max="10000" />
+      </label>
+
+      <label>
+        <span>Quality score (0.00 – 1.00, optional)</span>
+        <input type="number" formControlName="quality_score" min="0" max="1" step="0.01" />
+      </label>
+
+      <label>
+        <span>Noise level (0.00 – 1.00, optional)</span>
+        <input type="number" formControlName="noise_level" min="0" max="1" step="0.01" />
+      </label>
+
+      <label class="checkbox">
+        <input type="checkbox" formControlName="is_active" />
+        <span>Active</span>
+      </label>
+    </div>
+
+    @for (group of tagGroups; track group.key) {
+      <section class="tag-group">
+        <div class="tag-group-label">{{ group.label }} <span class="required">*</span></div>
+        <div class="chips">
+          @for (opt of group.options; track opt.value) {
+            <button
+              type="button"
+              class="chip-toggle"
+              [class.selected]="isTagSelected(group.key, opt.value)"
+              (click)="toggleTag(group.key, opt.value)"
+            >
+              {{ opt.label }}
+            </button>
+          }
+        </div>
+        @if (showTagErrors() && tagGroupEmpty(group.key)) {
+          <small class="field-error">Select at least one {{ group.label.toLowerCase() }}.</small>
+        }
+      </section>
+    }
+
+    @if (error(); as err) {
+      <div class="state error">{{ err }}</div>
+    }
+
+    <div class="form-actions">
+      <button class="btn" type="button" (click)="cancelForm()" [disabled]="saving()">Cancel</button>
+      <button class="btn primary" type="submit" [disabled]="saving()">
+        {{ saving() ? 'Saving…' : (editingId() ? 'Save' : 'Create') }}
+      </button>
+    </div>
+  </form>
+}
+
+@if (loading()) {
+  <div class="state">Loading…</div>
+} @else if (error() && !formOpen()) {
+  <div class="state error">{{ error() }}</div>
+} @else if (items().length === 0) {
+  <div class="state muted">No platform sources yet. Add the first one to seed the pool.</div>
+} @else {
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>URL</th>
+          <th>Active</th>
+          <th>Region Tags</th>
+          <th>Sector Tags</th>
+          <th>Customer Type Tags</th>
+          <th>Signal Focus Tags</th>
+          <th>Quality</th>
+          <th>Noise</th>
+          <th>Lang</th>
+          <th>Priority</th>
+          <th>Created</th>
+          <th class="actions-col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (s of items(); track s.id) {
+          <tr [class.row-busy]="busyRowId() === s.id">
+            <td>{{ s.name }}</td>
+            <td>{{ typeLabel(s.source_type) }}</td>
+            <td class="url-cell">
+              <a [href]="s.url" target="_blank" rel="noopener noreferrer" [title]="s.url">{{ s.url }}</a>
+            </td>
+            <td>
+              <span [class]="s.is_active ? 'chip success' : 'chip'">
+                {{ s.is_active ? 'Active' : 'Inactive' }}
+              </span>
+            </td>
+            @for (group of tagGroups; track group.key) {
+              <td class="tag-cell">
+                @if (rowTagLabels(s, group.key).length === 0) {
+                  <span class="muted small">—</span>
+                } @else {
+                  @for (label of rowTagLabels(s, group.key); track label) {
+                    <span class="tag-pill">{{ label }}</span>
+                  }
+                }
+              </td>
+            }
+            <td>{{ s.quality_score ?? '—' }}</td>
+            <td>{{ s.noise_level ?? '—' }}</td>
+            <td>{{ s.language ?? '—' }}</td>
+            <td>{{ s.priority }}</td>
+            <td>{{ s.created_at | date: 'yyyy-MM-dd HH:mm' }}</td>
+            <td class="row-actions">
+              <button
+                class="btn small primary"
+                type="button"
+                (click)="toggleActive(s)"
+                [disabled]="busyRowId() === s.id"
+                [title]="s.is_active ? 'Take this source out of rotation while keeping history' : 'Bring this source back into rotation'"
+              >
+                {{ s.is_active ? 'Deactivate' : 'Activate' }}
+              </button>
+              <button class="btn small" type="button" (click)="startEdit(s)" [disabled]="busyRowId() === s.id">
+                Edit
+              </button>
+              <button
+                class="btn small danger ghost"
+                type="button"
+                (click)="remove(s)"
+                [disabled]="busyRowId() === s.id"
+                title="Hard delete with FK cascade — prefer Deactivate"
+              >
+                Delete
+              </button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}

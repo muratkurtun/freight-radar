@@ -13,6 +13,9 @@ export class AuthStore {
     const role = this.currentUser()?.role;
     return role === 'tenant_admin' || role === 'platform_admin';
   });
+  readonly isPlatformAdmin = computed(
+    () => this.currentUser()?.role === 'platform_admin',
+  );
   readonly subscriptionStatus = computed(() => this.currentUser()?.subscription_status ?? null);
   readonly isTrialExpired = computed(() => this.subscriptionStatus() === 'expired');
   readonly isOnTrial = computed(() => this.subscriptionStatus() === 'trial');
