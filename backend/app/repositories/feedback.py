@@ -135,6 +135,10 @@ _STATS_BY_PROMPT_VERSION_SQL = text(
 
 _STATS_BY_SOURCE_SQL = text(
     """
+    -- Drive the aggregation from raw_source_items so that platform pool
+    -- sources (sources.tenant_id IS NULL) are picked up via the tenant's
+    -- own raw rows. Pre-0004 the query started from `sources` filtered
+    -- by src.tenant_id; that path no longer reaches platform rows.
     SELECT
         src.id            AS source_id,
         src.name          AS source_name,
@@ -143,11 +147,12 @@ _STATS_BY_SOURCE_SQL = text(
         COUNT(s.id) FILTER (WHERE s.review_status = 'rejected')       AS rejected,
         COUNT(s.id) FILTER (WHERE s.review_status = 'pending_review') AS pending,
         COUNT(s.id)                                                   AS total
-    FROM sources src
-    LEFT JOIN raw_source_items ri ON ri.source_id            = src.id
-    LEFT JOIN detected_signals  s ON s.raw_source_item_id    = ri.id
-                                  AND s.tenant_id            = src.tenant_id
-    WHERE src.tenant_id = :tenant_id
+    FROM raw_source_items ri
+    JOIN sources           src ON src.id = ri.source_id
+    LEFT JOIN detected_signals s
+        ON s.raw_source_item_id = ri.id
+       AND s.tenant_id          = :tenant_id
+    WHERE ri.tenant_id = :tenant_id
     GROUP BY src.id, src.name, src.source_type
     ORDER BY total DESC
     """

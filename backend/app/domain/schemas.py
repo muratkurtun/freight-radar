@@ -55,32 +55,79 @@ class RegisterResponse(BaseModel):
     user: CurrentUser
 
 
-# ---- Sources ----
+# ---- Platform sources ----
 
-class SourceCreate(BaseModel):
+class PlatformSourceCreate(BaseModel):
     source_type: SourceType
     name: str = Field(min_length=1, max_length=200)
     url: str = Field(min_length=1, max_length=1000)
     config: dict[str, Any] = Field(default_factory=dict)
     is_active: bool = True
+    region_tags: list[str] = Field(default_factory=list)
+    sector_tags: list[str] = Field(default_factory=list)
+    customer_type_tags: list[str] = Field(default_factory=list)
+    signal_focus_tags: list[str] = Field(default_factory=list)
+    language: str | None = Field(default=None, max_length=10)
+    priority: int = 100
+    quality_score: Decimal | None = Field(default=None, ge=0, le=1)
+    noise_level: Decimal | None = Field(default=None, ge=0, le=1)
 
 
-class SourceUpdate(BaseModel):
+class PlatformSourceUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=200)
     url: str | None = Field(default=None, max_length=1000)
     config: dict[str, Any] | None = None
     is_active: bool | None = None
+    region_tags: list[str] | None = None
+    sector_tags: list[str] | None = None
+    customer_type_tags: list[str] | None = None
+    signal_focus_tags: list[str] | None = None
+    language: str | None = Field(default=None, max_length=10)
+    priority: int | None = None
+    quality_score: Decimal | None = Field(default=None, ge=0, le=1)
+    noise_level: Decimal | None = Field(default=None, ge=0, le=1)
 
 
-class SourceRead(ORMModel):
+class PlatformSourceRead(ORMModel):
     id: UUID
-    tenant_id: UUID
     source_type: SourceType
     name: str
     url: str
     config: dict[str, Any]
     is_active: bool
+    region_tags: list[str]
+    sector_tags: list[str]
+    customer_type_tags: list[str]
+    signal_focus_tags: list[str]
+    language: str | None
+    priority: int
+    quality_score: Decimal | None
+    noise_level: Decimal | None
     created_at: datetime
+
+
+# ---- Tenant signal preferences ----
+
+class TenantPreferencesUpsert(BaseModel):
+    target_customer_types: list[str] = Field(default_factory=list)
+    sectors: list[str] = Field(default_factory=list)
+    regions: list[str] = Field(default_factory=list)
+    signal_focuses: list[str] = Field(default_factory=list)
+    minimum_confidence: Decimal = Field(default=Decimal("0"), ge=0, le=1)
+    is_active: bool = True
+
+
+class TenantPreferencesRead(ORMModel):
+    id: UUID
+    tenant_id: UUID
+    target_customer_types: list[str]
+    sectors: list[str]
+    regions: list[str]
+    signal_focuses: list[str]
+    minimum_confidence: Decimal
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
 
 
 # ---- Signals ----
@@ -230,8 +277,8 @@ class PagedSignals(BaseModel):
     page: Page
 
 
-class PagedSources(BaseModel):
-    items: list[SourceRead]
+class PagedPlatformSources(BaseModel):
+    items: list[PlatformSourceRead]
     page: Page
 
 

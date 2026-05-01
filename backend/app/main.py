@@ -7,10 +7,11 @@ from app.api import auth as auth_router
 from app.api import feedback as feedback_router
 from app.api import opportunities as opportunities_router
 from app.api import pipeline as pipeline_router
+from app.api import platform_sources as platform_sources_router
 from app.api import review as review_router
 from app.api import reviews as reviews_router
 from app.api import signals as signals_router
-from app.api import sources as sources_router
+from app.api import tenant_preferences as tenant_preferences_router
 from app.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
@@ -42,7 +43,8 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
 
     app.include_router(auth_router.router)
-    app.include_router(sources_router.router)
+    app.include_router(platform_sources_router.router)
+    app.include_router(tenant_preferences_router.router)
     app.include_router(signals_router.router)
     app.include_router(review_router.router)  # legacy /review/* — preserved
     app.include_router(reviews_router.router)

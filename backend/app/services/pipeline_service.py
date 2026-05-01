@@ -30,6 +30,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.collectors.registry import get_collector
+from app.core.errors import NotFoundError
 from app.core.hashing import content_hash, signal_hash
 from app.core.logging import get_logger
 from app.detectors.candidate_detector import detect_candidate_signals
@@ -38,9 +39,10 @@ from app.domain.enums import PipelineRunStatus, ReviewStatus
 from app.domain.models import DetectedSignal, PipelineRun, RawSourceItem, Source
 from app.domain.types import SignalResult, SourceItem
 from app.repositories.pipeline_runs import PipelineRunRepository
+from app.repositories.platform_sources import PlatformSourceRepository
 from app.repositories.raw_items import RawItemRepository
 from app.repositories.signals import SignalRepository
-from app.repositories.sources import SourceRepository
+from app.repositories.tenant_preferences import TenantPreferenceRepository
 from app.repositories.tenants import TenantRepository
 
 logger = get_logger(__name__)
@@ -91,7 +93,8 @@ class PipelineService:
     def __init__(self, db: Session, tenant_id: UUID, *, detector: SignalDetector | None = None):
         self.db = db
         self.tenant_id = tenant_id
-        self.sources = SourceRepository(db, tenant_id)
+        self.platform_sources = PlatformSourceRepository(db)
+        self.preferences = TenantPreferenceRepository(db, tenant_id)
         self.raws = RawItemRepository(db, tenant_id)
         self.signals = SignalRepository(db, tenant_id)
         self.runs = PipelineRunRepository(db, tenant_id)
@@ -102,14 +105,35 @@ class PipelineService:
     # ------------------------------------------------------------------
 
     def run_for_tenant(self) -> TenantPipelineSummary:
-        """Run the pipeline for every active source of this tenant.
+        """Run the pipeline against the platform sources matching this
+        tenant's preferences.
 
         Per-source failures are recorded as FAILED PipelineRun rows and
-        do not abort the tenant run; they surface in the summary."""
+        do not abort the tenant run; they surface in the summary.
+
+        Behaviour when the tenant has no usable preferences:
+        - no preference row at all → returns an empty summary, logs reason
+        - is_active=false          → same
+        - empty preference arrays  → matching naturally returns 0 sources
+        """
         started_at = _utcnow()
-        active_sources = self.sources.list_active()
+        prefs = self.preferences.get()
+        if prefs is None:
+            logger.info(
+                "Tenant pipeline skipped tenant=%s reason=no_preferences",
+                self.tenant_id,
+            )
+            return self._empty_summary(started_at)
+        if not prefs.is_active:
+            logger.info(
+                "Tenant pipeline skipped tenant=%s reason=preferences_inactive",
+                self.tenant_id,
+            )
+            return self._empty_summary(started_at)
+
+        active_sources = self.platform_sources.match_for_preferences(prefs)
         logger.info(
-            "Tenant pipeline started tenant=%s active_sources=%d",
+            "Tenant pipeline started tenant=%s matched_sources=%d",
             self.tenant_id,
             len(active_sources),
         )
@@ -149,8 +173,28 @@ class PipelineService:
         return summary
 
     def run_for_source(self, source_id: UUID) -> SourceRunSummary:
-        source = self.sources.get_or_404(source_id)
+        """Run the pipeline against a single platform source for this
+        tenant. Used by tests and ad-hoc admin tooling — production
+        scheduling goes through `run_for_tenant`."""
+        source = self.platform_sources.get(source_id)
+        if source is None:
+            raise NotFoundError(f"Source {source_id} not found")
         return self._run_and_summarize(source)
+
+    def _empty_summary(self, started_at: datetime) -> TenantPipelineSummary:
+        finished_at = _utcnow()
+        return TenantPipelineSummary(
+            tenant_id=self.tenant_id,
+            started_at=started_at,
+            finished_at=finished_at,
+            source_run_count=0,
+            succeeded_run_count=0,
+            failed_run_count=0,
+            collected_item_count=0,
+            inserted_signal_count=0,
+            failed_item_count=0,
+            source_runs=[],
+        )
 
     # ------------------------------------------------------------------
     # per-source orchestration

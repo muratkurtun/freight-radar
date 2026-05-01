@@ -16,7 +16,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -84,25 +84,57 @@ class User(Base):
 
 
 class Source(Base):
+    """Platform source pool.
+
+    Sources are centrally curated by platform admins and matched to
+    tenants by tag intersection (see PlatformSourceRepository). The
+    `tenant_id` column is kept for backward compatibility:
+    - `tenant_id IS NULL`     → platform pool row (the new model)
+    - `tenant_id IS NOT NULL` → legacy pre-0004 tenant-owned row,
+                                preserved for FK / pipeline run history;
+                                not picked up by the matching query.
+    """
+
     __tablename__ = "sources"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "url", name="uq_sources_tenant_url"),
         CheckConstraint(
             "source_type IN ('news','job_board','company_website')",
             name="ck_sources_source_type",
         ),
-        Index("ix_sources_tenant_active", "tenant_id", "is_active"),
+        # Indexes are declared in migration 0004 (partial unique on
+        # platform url, GIN indexes on tag arrays). Keeping them out of
+        # __table_args__ avoids drift between ORM and migrations.
     )
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
-    tenant_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    tenant_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True
     )
     source_type: Mapped[str] = mapped_column(String(50), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     url: Mapped[str] = mapped_column(String(1000), nullable=False)
     config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    region_tags: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default="{}"
+    )
+    sector_tags: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default="{}"
+    )
+    customer_type_tags: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default="{}"
+    )
+    signal_focus_tags: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default="{}"
+    )
+    language: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
+    quality_score: Mapped[Decimal | None] = mapped_column(
+        Numeric(precision=3, scale=2), nullable=True
+    )
+    noise_level: Mapped[Decimal | None] = mapped_column(
+        Numeric(precision=3, scale=2), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -145,7 +177,12 @@ class PipelineRun(Base):
 class RawSourceItem(Base):
     __tablename__ = "raw_source_items"
     __table_args__ = (
-        UniqueConstraint("source_id", "external_id", name="uq_raw_items_source_external"),
+        # Tenant-scoped: with the platform source pool, two tenants can
+        # legitimately ingest the same external_id from the same source.
+        UniqueConstraint(
+            "tenant_id", "source_id", "external_id",
+            name="uq_raw_items_tenant_source_external",
+        ),
         UniqueConstraint("tenant_id", "content_hash", name="uq_raw_items_tenant_content"),
         Index("ix_raw_items_tenant_processed", "tenant_id", "processed_at"),
         Index("ix_raw_items_source", "source_id"),
@@ -220,6 +257,47 @@ class DetectedSignal(Base):
         String(20), nullable=False, default=ReviewStatus.PENDING_REVIEW.value
     )
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class TenantSignalPreference(Base):
+    """One row per tenant. Drives which platform sources the pipeline
+    iterates for that tenant via tag intersection."""
+
+    __tablename__ = "tenant_signal_preferences"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", name="uq_tenant_signal_preferences_tenant"),
+        CheckConstraint(
+            "minimum_confidence >= 0 AND minimum_confidence <= 1",
+            name="ck_tenant_signal_preferences_confidence",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    target_customer_types: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default="{}"
+    )
+    sectors: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default="{}"
+    )
+    regions: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default="{}"
+    )
+    signal_focuses: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default="{}"
+    )
+    minimum_confidence: Mapped[Decimal] = mapped_column(
+        Numeric(precision=4, scale=3), nullable=False, default=Decimal("0"), server_default="0"
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 

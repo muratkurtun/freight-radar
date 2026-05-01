@@ -5,6 +5,11 @@ LLM verifier and four repositories. These tests bypass the real DB by
 constructing PipelineService directly via __new__ and wiring in fakes
 for every repo + the detector. The collector is registered through the
 public registry so the source-type dispatch path is also exercised.
+
+After migration 0004 sources are a platform-managed pool and tenants
+pick preferences. The fakes here mirror that shape:
+  - FakePlatformSourceRepo replaces the old tenant-scoped SourceRepo
+  - FakePreferenceRepo carries the tenant's preference row
 """
 from __future__ import annotations
 
@@ -56,15 +61,42 @@ class FakeSession:
             raise
 
 
-class FakeSourceRepo:
-    def __init__(self, source):
-        self._source = source
+class FakePlatformSourceRepo:
+    """Stub for PlatformSourceRepository. `match_for_preferences` mirrors
+    the production semantics: empty prefs match nothing, inactive prefs
+    short-circuit. `get` returns the configured source by id."""
 
-    def list_active(self):
-        return [self._source]
+    def __init__(self, sources):
+        self._sources = list(sources)
 
-    def get_or_404(self, _id):
-        return self._source
+    def get(self, source_id):
+        for s in self._sources:
+            if s.id == source_id:
+                return s
+        return None
+
+    def get_or_404(self, source_id):
+        s = self.get(source_id)
+        if s is None:
+            raise AssertionError(f"source {source_id} not in fake repo")
+        return s
+
+    def match_for_preferences(self, prefs):
+        if prefs is None or not prefs.is_active:
+            return []
+        # Deterministic order: priority asc, id asc — matches repo SQL.
+        return sorted(
+            (s for s in self._sources if s.is_active),
+            key=lambda s: (getattr(s, "priority", 100), str(s.id)),
+        )
+
+
+class FakePreferenceRepo:
+    def __init__(self, pref=None):
+        self._pref = pref
+
+    def get(self):
+        return self._pref
 
 
 class FakeRawRepo:
@@ -183,17 +215,29 @@ def fake_news_collector(monkeypatch):
 
 def _build_service(
     *,
-    source,
+    source=None,
+    sources=None,
+    tenant_id=None,
+    pref=None,
     raws=None,
     signals=None,
     runs=None,
     detector=None,
 ):
+    """Wire up a PipelineService with fakes for every dependency.
+
+    Pass either `source` (single) or `sources` (list). Defaults to
+    tenant_id=uuid4() if not provided."""
+    if source is not None and sources is None:
+        sources = [source]
+    sources = sources or []
+
     db = FakeSession()
     service = PipelineService.__new__(PipelineService)
     service.db = db
-    service.tenant_id = source.tenant_id
-    service.sources = FakeSourceRepo(source)
+    service.tenant_id = tenant_id or uuid4()
+    service.platform_sources = FakePlatformSourceRepo(sources)
+    service.preferences = FakePreferenceRepo(pref)
     service.raws = raws or FakeRawRepo()
     service.signals = signals or FakeSignalRepo()
     service.runs = runs or FakeRunRepo()
@@ -201,13 +245,22 @@ def _build_service(
     return service, db
 
 
-def _make_source(source_type=SourceType.NEWS):
+def _make_source(source_type=SourceType.NEWS, *, priority=100, is_active=True):
+    """Platform-pool source: tenant_id=None to satisfy the new model."""
     return SimpleNamespace(
         id=uuid4(),
-        tenant_id=uuid4(),
+        tenant_id=None,
         source_type=source_type.value,
         config={},
+        is_active=is_active,
+        priority=priority,
     )
+
+
+def _make_pref(*, is_active=True):
+    """Active preference. The fake matcher only checks `is_active` —
+    tag intersection is covered in test_platform_source_matcher.py."""
+    return SimpleNamespace(is_active=is_active)
 
 
 # --------------------------------------------------------------------------
@@ -311,6 +364,63 @@ def test_duplicate_signal_hash_is_dropped(fake_news_collector):
 
     assert summary.inserted_signal_count == 0
     assert signals.added == []  # nothing inserted
+
+
+def test_run_for_tenant_skips_when_no_preferences(fake_news_collector):
+    """Tenant without any preference row → 0 source runs, no error."""
+    fake_news_collector.items = []  # would never be reached
+    service, _ = _build_service(pref=None)
+
+    summary = service.run_for_tenant()
+
+    assert summary.source_run_count == 0
+    assert summary.collected_item_count == 0
+    assert summary.inserted_signal_count == 0
+
+
+def test_run_for_tenant_skips_when_preferences_inactive(fake_news_collector):
+    """is_active=false on the preference row pauses the tenant entirely
+    even if matching sources exist."""
+    source = _make_source()
+    service, _ = _build_service(source=source, pref=_make_pref(is_active=False))
+
+    summary = service.run_for_tenant()
+
+    assert summary.source_run_count == 0
+
+
+def test_run_for_tenant_runs_matched_sources_in_priority_order(fake_news_collector):
+    """Matched sources are dispatched in priority asc, id asc order."""
+    fake_news_collector.items = []  # collector returns no items: 0-collected runs
+    s_low = _make_source(priority=10)
+    s_mid = _make_source(priority=50)
+    s_high = _make_source(priority=200)
+    # Pass them out of order to prove the matcher orders them.
+    service, _ = _build_service(
+        sources=[s_high, s_low, s_mid], pref=_make_pref()
+    )
+
+    summary = service.run_for_tenant()
+
+    run_source_ids = [r.source_id for r in summary.source_runs]
+    assert run_source_ids == [s_low.id, s_mid.id, s_high.id]
+    assert summary.source_run_count == 3
+    assert summary.failed_run_count == 0
+
+
+def test_run_for_tenant_skips_inactive_sources(fake_news_collector):
+    """is_active=false on the source excludes it from matching."""
+    fake_news_collector.items = []
+    active = _make_source(is_active=True)
+    inactive = _make_source(is_active=False)
+    service, _ = _build_service(
+        sources=[active, inactive], pref=_make_pref()
+    )
+
+    summary = service.run_for_tenant()
+
+    assert summary.source_run_count == 1
+    assert summary.source_runs[0].source_id == active.id
 
 
 def test_item_failure_is_isolated(fake_news_collector):

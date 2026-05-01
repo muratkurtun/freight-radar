@@ -22,10 +22,7 @@ export class ShellComponent {
   protected store = inject(AuthStore);
 
   readonly navItems = computed<NavItem[]>(() => {
-    const items: NavItem[] = [
-      { path: '/opportunities', label: 'Opportunities' },
-      { path: '/sources', label: 'Sources' },
-    ];
+    const items: NavItem[] = [{ path: '/opportunities', label: 'Opportunities' }];
     if (this.store.isAdmin()) {
       items.push(
         { path: '/reviews/pending', label: 'Pending Reviews' },

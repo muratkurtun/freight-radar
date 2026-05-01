@@ -87,6 +87,15 @@ def require_tenant_admin(ctx: TenantContext = Depends(tenant_context)) -> Tenant
     return ctx
 
 
+def require_platform_admin(ctx: TenantContext = Depends(tenant_context)) -> TenantContext:
+    """Strictly platform_admin. Tenant admins are NOT allowed — platform
+    source pool management is cross-tenant and must not be reachable
+    from a tenant admin role."""
+    if ctx.role != UserRole.PLATFORM_ADMIN.value:
+        raise PermissionError("Platform admin role required")
+    return ctx
+
+
 def require_active_subscription(
     ctx: TenantContext = Depends(tenant_context),
     db: Session = Depends(db_session),
