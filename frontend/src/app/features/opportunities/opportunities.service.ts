@@ -2,11 +2,12 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { ApiBaseService } from '../../core/http/api-base.service';
-import { SignalType } from '../../core/models/enums.model';
 import { PagedOpportunities } from '../../core/models/opportunity.model';
 
 export interface OpportunitiesQuery {
-  signal_type?: SignalType | null;
+  /** Filter is a free-form string so callers can pass either v2 values
+   *  from SIGNAL_TYPE_OPTIONS or legacy strings without TS friction. */
+  signal_type?: string | null;
   since?: string | null;
   limit?: number;
   offset?: number;

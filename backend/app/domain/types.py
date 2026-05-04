@@ -42,10 +42,17 @@ class LlmOutput:
     """Raw parsed LLM response, before validation/normalization.
 
     Mirrors the JSON shape requested by the prompt. Values may be
-    invalid (unknown signal_type, out-of-range confidence, junk fields);
-    normalization into SignalResult handles that."""
+    invalid (unknown signal_type, out-of-range confidence, off-vocab
+    enum); normalization into SignalResult handles that.
+
+    `is_signal` is the LLM's own boolean — distinct from the
+    derived-from-signal_type one in SignalResult — so that a LLM that
+    returns is_signal=false with an inadvertently-set signal_type still
+    short-circuits at the orchestration layer.
+    """
 
     prompt_version: str
+    is_signal: bool = False
     signal_type: str | None = None
     confidence: float = 0.0
     extracted_fields: dict[str, Any] = field(default_factory=dict)
@@ -59,23 +66,49 @@ class SignalResult:
       did not identify a signal.
     - confidence: clamped to [0, 1], quantized to 3 decimal places to
       match the NUMERIC(4,3) column.
-    - Promoted fields are split out of the LLM's extracted_fields; the
-      rest goes to `extra` (persisted as JSONB).
+    - Pre-pivot fields (location, role_title, supplier_name, summary)
+      are kept on the dataclass for back-compat with legacy code paths,
+      but are not populated by the v2 detector.
+    - Logistics lead fields (target_customer_type, sector, region,
+      detected_event, why_relevant_for_logistics, potential_logistics_need,
+      recommended_services, urgency, suggested_sales_action,
+      suggested_outreach_message, evidence_snippet) are the v2 output.
+    - extra: anything the LLM returned outside the known schema.
     """
 
     prompt_version: str
     signal_type: SignalType | None = None
     confidence: Decimal = Decimal("0.000")
     company_name: str | None = None
+
+    # Pre-pivot fields — kept nullable for back-compat with legacy
+    # callers / tests; v2 leaves them None.
     location: str | None = None
     role_title: str | None = None
     supplier_name: str | None = None
     summary: str | None = None
+
+    # Logistics lead fields (v2).
+    target_customer_type: str | None = None
+    sector: str | None = None
+    region: str | None = None
+    detected_event: str | None = None
+    why_relevant_for_logistics: str | None = None
+    potential_logistics_need: str | None = None
+    recommended_services: list[str] = field(default_factory=list)
+    urgency: str | None = None
+    suggested_sales_action: str | None = None
+    suggested_outreach_message: str | None = None
+    evidence_snippet: str | None = None
+
     extra: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_signal(self) -> bool:
-        return self.signal_type is not None
+        # A signal requires both a known type AND a company_name. The
+        # company guard implements the deterministic rule: no company
+        # named in the text → not actionable for sales, drop.
+        return self.signal_type is not None and bool(self.company_name)
 
 
 @dataclass(slots=True, kw_only=True, frozen=True)

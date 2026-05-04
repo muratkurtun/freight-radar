@@ -38,7 +38,7 @@
     <tbody>
       @for (op of items(); track op.signal_id) {
         <tr>
-          <td><span class="chip">{{ op.signal_type }}</span></td>
+          <td><span class="chip">{{ typeLabel(op.signal_type) }}</span></td>
           <td>
             <div class="primary">
               {{ op.company_name || op.supplier_name || op.raw_title || '—' }}

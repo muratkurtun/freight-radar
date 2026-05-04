@@ -25,37 +25,49 @@ def test_content_hash_distinguishes_distinct_inputs():
     assert content_hash(title="A", content="B") != content_hash(title="B", content="A")
 
 
+# --- signal_hash (post-0005 four-input shape) ----------------------------
+
 def test_signal_hash_includes_all_fields():
     base = signal_hash(
-        signal_type="warehouse_opening",
+        signal_type="export_expansion",
         company_name="Acme",
-        location="Memphis",
-        role_title=None,
-        supplier_name=None,
+        region="eu",
+        target_customer_type="exporter",
     )
     different_company = signal_hash(
-        signal_type="warehouse_opening",
+        signal_type="export_expansion",
         company_name="Globex",
-        location="Memphis",
-        role_title=None,
-        supplier_name=None,
+        region="eu",
+        target_customer_type="exporter",
+    )
+    different_region = signal_hash(
+        signal_type="export_expansion",
+        company_name="Acme",
+        region="turkey",
+        target_customer_type="exporter",
+    )
+    different_segment = signal_hash(
+        signal_type="export_expansion",
+        company_name="Acme",
+        region="eu",
+        target_customer_type="distributor",
     )
     assert base != different_company
+    assert base != different_region
+    assert base != different_segment
 
 
 def test_signal_hash_treats_none_and_empty_equivalently():
     a = signal_hash(
-        signal_type="supplier_change",
+        signal_type="new_warehouse",
         company_name="Acme",
-        location=None,
-        role_title=None,
-        supplier_name=None,
+        region=None,
+        target_customer_type=None,
     )
     b = signal_hash(
-        signal_type="supplier_change",
+        signal_type="new_warehouse",
         company_name="Acme",
-        location="",
-        role_title="",
-        supplier_name="",
+        region="",
+        target_customer_type="",
     )
     assert a == b

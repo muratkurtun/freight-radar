@@ -97,17 +97,30 @@ class SignalRepository(TenantAwareRepository[DetectedSignal]):
         confidence: Decimal,
         signal_hash: str,
         company_name: str | None,
-        location: str | None,
-        role_title: str | None,
-        supplier_name: str | None,
-        summary: str | None,
+        target_customer_type: str | None = None,
+        sector: str | None = None,
+        region: str | None = None,
+        detected_event: str | None = None,
+        why_relevant_for_logistics: str | None = None,
+        potential_logistics_need: str | None = None,
+        recommended_services: list[str] | None = None,
+        urgency: str | None = None,
+        suggested_sales_action: str | None = None,
+        suggested_outreach_message: str | None = None,
+        evidence_snippet: str | None = None,
         extra: dict[str, Any],
         prompt_version: str,
     ) -> DetectedSignal | None:
         """Insert a new signal with review_status='pending_review'.
 
         Returns None if a signal with the same signal_hash already
-        exists for this tenant (idempotent from the service's view)."""
+        exists for this tenant (idempotent from the service's view).
+
+        Pre-pivot fields (location, role_title, supplier_name, summary)
+        are no longer accepted here — write paths produce v2 logistics
+        leads only. Legacy rows in the table keep their old field
+        values; they are read but never created via this constructor.
+        """
         if self.find_by_signal_hash(signal_hash) is not None:
             return None
         signal = DetectedSignal(
@@ -117,10 +130,17 @@ class SignalRepository(TenantAwareRepository[DetectedSignal]):
             confidence=confidence,
             signal_hash=signal_hash,
             company_name=company_name,
-            location=location,
-            role_title=role_title,
-            supplier_name=supplier_name,
-            summary=summary,
+            target_customer_type=target_customer_type,
+            sector=sector,
+            region=region,
+            detected_event=detected_event,
+            why_relevant_for_logistics=why_relevant_for_logistics,
+            potential_logistics_need=potential_logistics_need,
+            recommended_services=list(recommended_services or []),
+            urgency=urgency,
+            suggested_sales_action=suggested_sales_action,
+            suggested_outreach_message=suggested_outreach_message,
+            evidence_snippet=evidence_snippet,
             extra=extra,
             prompt_version=prompt_version,
             review_status=ReviewStatus.PENDING_REVIEW.value,

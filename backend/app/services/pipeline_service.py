@@ -30,13 +30,20 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.collectors.registry import get_collector
+from app.config import get_settings
 from app.core.errors import NotFoundError
 from app.core.hashing import content_hash, signal_hash
 from app.core.logging import get_logger
-from app.detectors.candidate_detector import detect_candidate_signals
+from app.detectors.candidate_detector import should_call_llm
 from app.detectors.signal_detector import SignalDetector
 from app.domain.enums import PipelineRunStatus, ReviewStatus
-from app.domain.models import DetectedSignal, PipelineRun, RawSourceItem, Source
+from app.domain.models import (
+    DetectedSignal,
+    PipelineRun,
+    RawSourceItem,
+    Source,
+    TenantSignalPreference,
+)
 from app.domain.types import SignalResult, SourceItem
 from app.repositories.pipeline_runs import PipelineRunRepository
 from app.repositories.platform_sources import PlatformSourceRepository
@@ -99,6 +106,7 @@ class PipelineService:
         self.signals = SignalRepository(db, tenant_id)
         self.runs = PipelineRunRepository(db, tenant_id)
         self._detector_factory = lambda: detector or SignalDetector()
+        self._max_items_per_run = get_settings().max_items_per_source_run
 
     # ------------------------------------------------------------------
     # public entry points
@@ -225,10 +233,27 @@ class PipelineService:
             new_items = self._persist_new_items(source, collected, run.id)
             items_new = len(new_items)
 
-            if new_items:
+            # Per-source-run cap: protect the OpenAI bill from a single
+            # collector dumping hundreds of new items in one tick. The
+            # OpenAI Console hard limit is the real bill cap; this is
+            # just an in-app guard and is logged when it bites so we
+            # know the cap is the operative reason items got skipped.
+            cap = self._max_items_per_run
+            llm_eligible = new_items
+            if cap > 0 and len(new_items) > cap:
+                logger.warning(
+                    "Per-run cap reached tenant=%s source=%s new=%d cap=%d "
+                    "(%d items deferred to next run)",
+                    self.tenant_id, source.id, len(new_items), cap,
+                    len(new_items) - cap,
+                )
+                llm_eligible = new_items[:cap]
+
+            if llm_eligible:
                 detector = self._detector_factory()
+                prefs = self.preferences.get()
                 inserted_signal_count, failed_item_count = self._detect_and_persist(
-                    source, new_items, detector
+                    source, llm_eligible, detector, prefs
                 )
 
             self.runs.mark_finished(
@@ -322,6 +347,7 @@ class PipelineService:
         source: Source,
         items: list[RawSourceItem],
         detector: SignalDetector,
+        preferences: TenantSignalPreference | None,
     ) -> tuple[int, int]:
         """Returns (inserted_signal_count, failed_item_count).
 
@@ -329,13 +355,27 @@ class PipelineService:
         (LLM error, JSON parse error, integrity error, ...) rolls back
         only that item's partial writes and leaves earlier signals
         intact. Failed items keep processed_at NULL so a later run can
-        retry them."""
+        retry them.
+
+        Cost visibility: tracks how many items actually called the LLM
+        (i.e. passed the candidate gate) and logs it at the end of the
+        per-source run. The OpenAI Console hard limit is still the real
+        bill cap; this just tells us where the tokens went."""
         inserted = 0
         failed = 0
+        llm_calls = 0
+        gate_skips = 0
         for item in items:
             try:
                 with self.db.begin_nested():
-                    if self._detect_one(source, item, detector):
+                    detected, called_llm = self._detect_one(
+                        source, item, detector, preferences
+                    )
+                    if called_llm:
+                        llm_calls += 1
+                    else:
+                        gate_skips += 1
+                    if detected:
                         inserted += 1
                     self.raws.mark_processed(item)
             except Exception:
@@ -347,40 +387,47 @@ class PipelineService:
                     item.id,
                 )
         self.db.commit()
+        logger.info(
+            "Detection finished tenant=%s source=%s items=%d llm_calls=%d "
+            "gate_skips=%d signals=%d failures=%d",
+            self.tenant_id, source.id, len(items), llm_calls, gate_skips,
+            inserted, failed,
+        )
         return inserted, failed
 
     def _detect_one(
-        self, source: Source, item: RawSourceItem, detector: SignalDetector
-    ) -> bool:
-        """Prefilter + LLM verify + map + persist for one raw item.
+        self,
+        source: Source,
+        item: RawSourceItem,
+        detector: SignalDetector,
+        preferences: TenantSignalPreference | None,
+    ) -> tuple[bool, bool]:
+        """Gate + LLM verify + map + persist for one raw item.
 
-        Returns True only when a NEW signal row was inserted. Prefilter
-        misses, LLM non-signals, and duplicate signal_hash hits all
-        return False without raising."""
-        candidates = detect_candidate_signals(
+        Returns `(inserted, called_llm)`:
+          - inserted=True only when a NEW signal row was persisted
+          - called_llm reflects whether the candidate gate let this item
+            through and the verifier was actually invoked. Gate misses,
+            LLM non-signals, and duplicate signal_hash hits all set
+            inserted=False without raising."""
+        if not should_call_llm(
             source_type=source.source_type,
             title=item.title,
             content=item.content,
-        )
-        if not candidates:
-            logger.debug("Prefilter miss item=%s", item.id)
-            return False
+        ):
+            logger.debug("Gate miss item=%s", item.id)
+            return False, False
 
-        logger.debug(
-            "Prefilter hit item=%s types=%s",
-            item.id,
-            [c.signal_type.value for c in candidates],
-        )
         result = detector.detect(
             source_type=source.source_type,
             title=item.title,
             url=item.url,
             content=item.content,
-            candidate_hints=[c.signal_type for c in candidates],
+            preferences=preferences,
         )
         if not result.is_signal:
-            return False
-        return self._persist_signal(item, result)
+            return False, True
+        return self._persist_signal(item, result), True
 
     def _persist_signal(self, item: RawSourceItem, result: SignalResult) -> bool:
         """Insert a detected_signals row in pending_review state.
@@ -394,9 +441,8 @@ class PipelineService:
         shash = signal_hash(
             signal_type=result.signal_type.value,
             company_name=result.company_name,
-            location=result.location,
-            role_title=result.role_title,
-            supplier_name=result.supplier_name,
+            region=result.region,
+            target_customer_type=result.target_customer_type,
         )
         if self.signals.find_by_signal_hash(shash) is not None:
             logger.debug(
@@ -414,10 +460,18 @@ class PipelineService:
             confidence=result.confidence,
             signal_hash=shash,
             company_name=result.company_name,
-            location=result.location,
-            role_title=result.role_title,
-            supplier_name=result.supplier_name,
-            summary=result.summary,
+            # v2 logistics-lead fields
+            target_customer_type=result.target_customer_type,
+            sector=result.sector,
+            region=result.region,
+            detected_event=result.detected_event,
+            why_relevant_for_logistics=result.why_relevant_for_logistics,
+            potential_logistics_need=result.potential_logistics_need,
+            recommended_services=list(result.recommended_services),
+            urgency=result.urgency,
+            suggested_sales_action=result.suggested_sales_action,
+            suggested_outreach_message=result.suggested_outreach_message,
+            evidence_snippet=result.evidence_snippet,
             extra=result.extra,
             prompt_version=result.prompt_version,
             review_status=ReviewStatus.PENDING_REVIEW.value,

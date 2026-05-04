@@ -212,13 +212,22 @@ class RawSourceItem(Base):
 
 
 class DetectedSignal(Base):
+    """Logistics sales lead.
+
+    The signal_type CHECK constraint was dropped in migration 0005; the
+    SignalType enum is the *write* authority but legacy rows may carry
+    pre-pivot strings (`warehouse_opening`, `supplier_change`,
+    `hiring_supply_chain_role`). Read paths must tolerate unknown
+    values.
+
+    Pre-pivot columns (location, role_title, supplier_name, summary)
+    stay nullable for back-compat — they are NULL on post-pivot rows
+    and populated on legacy rows.
+    """
+
     __tablename__ = "detected_signals"
     __table_args__ = (
         UniqueConstraint("tenant_id", "signal_hash", name="uq_signals_tenant_hash"),
-        CheckConstraint(
-            "signal_type IN ('warehouse_opening','supplier_change','hiring_supply_chain_role')",
-            name="ck_signals_signal_type",
-        ),
         CheckConstraint(
             "review_status IN ('pending_review','approved','rejected')",
             name="ck_signals_review_status",
@@ -246,11 +255,29 @@ class DetectedSignal(Base):
         Numeric(precision=4, scale=3), nullable=False, default=Decimal("0")
     )
     signal_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+
+    # Pre-pivot columns — kept for legacy rows; not populated post-0005.
     company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     supplier_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Logistics lead fields — added in 0005, all nullable.
+    target_customer_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    sector: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    region: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    detected_event: Mapped[str | None] = mapped_column(Text, nullable=True)
+    why_relevant_for_logistics: Mapped[str | None] = mapped_column(Text, nullable=True)
+    potential_logistics_need: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recommended_services: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default="{}"
+    )
+    urgency: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    suggested_sales_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+    suggested_outreach_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     extra: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     prompt_version: Mapped[str] = mapped_column(String(20), nullable=False)
     review_status: Mapped[str] = mapped_column(

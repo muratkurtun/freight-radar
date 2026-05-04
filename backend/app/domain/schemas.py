@@ -133,16 +133,45 @@ class TenantPreferencesRead(ORMModel):
 # ---- Signals ----
 
 class SignalRead(ORMModel):
+    """Detected signal as returned to the API.
+
+    `signal_type` is `str`, not the SignalType enum, so legacy pre-0005
+    rows (warehouse_opening / supplier_change / hiring_supply_chain_role)
+    deserialize without raising. The frontend handles unknown values
+    with an 'unknown' fallback.
+
+    Pre-pivot fields (location, role_title, supplier_name, summary) are
+    kept so existing UI and analytics that read them keep working —
+    they are NULL on post-0005 rows. Logistics-lead fields are added
+    alongside, all optional, so old rows return them as None.
+    """
+
     id: UUID
     tenant_id: UUID
     raw_source_item_id: UUID
-    signal_type: SignalType
+    signal_type: str
     confidence: Decimal
     company_name: str | None
-    location: str | None
-    role_title: str | None
-    supplier_name: str | None
-    summary: str | None
+
+    # Legacy fields (pre-0005)
+    location: str | None = None
+    role_title: str | None = None
+    supplier_name: str | None = None
+    summary: str | None = None
+
+    # Logistics-lead fields (post-0005)
+    target_customer_type: str | None = None
+    sector: str | None = None
+    region: str | None = None
+    detected_event: str | None = None
+    why_relevant_for_logistics: str | None = None
+    potential_logistics_need: str | None = None
+    recommended_services: list[str] = Field(default_factory=list)
+    urgency: str | None = None
+    suggested_sales_action: str | None = None
+    suggested_outreach_message: str | None = None
+    evidence_snippet: str | None = None
+
     extra: dict[str, Any]
     prompt_version: str
     review_status: ReviewStatus
@@ -188,14 +217,37 @@ class ReviewDecisionRequest(BaseModel):
 # ---- Opportunities ----
 
 class OpportunityRead(BaseModel):
+    """Approved signal joined with raw item + source — what sales sees.
+
+    Same back-compat strategy as SignalRead: signal_type is str so
+    legacy rows pass through; legacy fields stay; logistics-lead fields
+    are added as optional. Frontend renders whichever set is populated.
+    """
+
     signal_id: UUID
-    signal_type: SignalType
+    signal_type: str
     confidence: Decimal
     company_name: str | None
-    location: str | None
-    role_title: str | None
-    supplier_name: str | None
-    summary: str | None
+
+    # Legacy fields
+    location: str | None = None
+    role_title: str | None = None
+    supplier_name: str | None = None
+    summary: str | None = None
+
+    # Logistics-lead fields (post-0005, optional for back-compat)
+    target_customer_type: str | None = None
+    sector: str | None = None
+    region: str | None = None
+    detected_event: str | None = None
+    why_relevant_for_logistics: str | None = None
+    potential_logistics_need: str | None = None
+    recommended_services: list[str] = Field(default_factory=list)
+    urgency: str | None = None
+    suggested_sales_action: str | None = None
+    suggested_outreach_message: str | None = None
+    evidence_snippet: str | None = None
+
     created_at: datetime
     raw_title: str | None
     raw_url: str | None
@@ -209,7 +261,7 @@ class OpportunityRead(BaseModel):
 
 class FalsePositiveRead(BaseModel):
     signal_id: UUID
-    signal_type: SignalType
+    signal_type: str
     confidence: Decimal
     prompt_version: str
     company_name: str | None
@@ -232,7 +284,9 @@ class ApprovalStatsRead(BaseModel):
 
 
 class ApprovalStatsByTypeRead(BaseModel):
-    signal_type: SignalType
+    # str (not SignalType enum) so legacy pre-0005 signal_type values
+    # in detected_signals show up in feedback analytics without raising.
+    signal_type: str
     stats: ApprovalStatsRead
 
 

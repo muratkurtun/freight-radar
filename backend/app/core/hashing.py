@@ -26,15 +26,28 @@ def signal_hash(
     *,
     signal_type: str,
     company_name: str | None,
-    location: str | None,
-    role_title: str | None,
-    supplier_name: str | None,
+    region: str | None,
+    target_customer_type: str | None,
 ) -> str:
+    """Dedupe key for detected_signals.
+
+    Migration 0005 changed the inputs from
+        (type, company, location, role_title, supplier_name)
+    to
+        (type, company, region, target_customer_type)
+    so that the same company surfacing the same lead in the same region
+    + segment dedupes once. Different segments for the same company
+    stay separate (e.g. ABC Foods as exporter and as distributor are
+    two leads).
+
+    The change is safe for existing rows: their hashes were computed
+    over a different shape, so old vs new hashes never collide. Old
+    rows therefore stay valid under the same UNIQUE(tenant_id, signal_hash)
+    constraint."""
     parts = [
         signal_type,
         _normalize(company_name),
-        _normalize(location),
-        _normalize(role_title),
-        _normalize(supplier_name),
+        _normalize(region),
+        _normalize(target_customer_type),
     ]
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()

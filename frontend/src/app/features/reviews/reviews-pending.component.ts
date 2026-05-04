@@ -2,6 +2,7 @@ import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+import { signalTypeLabel } from '../../core/models/enums.model';
 import { Signal as SignalRow } from '../../core/models/review.model';
 import { ReviewsService } from './reviews.service';
 
@@ -27,6 +28,9 @@ export class ReviewsPendingComponent {
   protected readonly rejectingId = signal<string | null>(null);
   protected readonly rejectReason = signal('');
   protected readonly decisionLoading = signal(false);
+
+  /** Render any signal_type string (v2 or legacy) as a human label. */
+  protected readonly typeLabel = signalTypeLabel;
 
   constructor() {
     this.reload();

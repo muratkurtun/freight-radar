@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     scheduler_enabled: bool = True
     pipeline_interval_minutes: int = 60
 
+    # Per-source-run safety cap on raw items handed to the LLM gate +
+    # verifier. The OpenAI Console hard limit is the real bill cap; this
+    # keeps a single noisy collector from dumping hundreds of items into
+    # the verifier in one tick. 0 disables the cap.
+    max_items_per_source_run: int = 50
+
     trial_days: int = 7
 
     cors_origins: str = "http://localhost:4200"

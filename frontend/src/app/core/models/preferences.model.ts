@@ -57,6 +57,7 @@ export const SIGNAL_FOCUS_OPTIONS: TaxonomyOption[] = [
   { value: 'hiring_export_role', label: 'Hiring export role' },
   { value: 'investment_incentive', label: 'Investment incentive' },
   { value: 'supply_chain_problem', label: 'Supply chain problem' },
+  { value: 'tender_or_contract', label: 'Tender or contract' },
 ];
 
 export interface TenantPreferences {

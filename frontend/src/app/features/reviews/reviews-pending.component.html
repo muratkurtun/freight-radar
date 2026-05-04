@@ -28,7 +28,7 @@
     <tbody>
       @for (s of items(); track s.id) {
         <tr>
-          <td><span class="chip">{{ s.signal_type }}</span></td>
+          <td><span class="chip">{{ typeLabel(s.signal_type) }}</span></td>
           <td>
             <div class="primary">
               {{ s.company_name || s.supplier_name || '—' }}

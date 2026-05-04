@@ -2,7 +2,10 @@ import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { SignalType } from '../../core/models/enums.model';
+import {
+  SIGNAL_TYPE_OPTIONS,
+  signalTypeLabel,
+} from '../../core/models/enums.model';
 import { Opportunity } from '../../core/models/opportunity.model';
 import { OpportunitiesService } from './opportunities.service';
 
@@ -23,13 +26,14 @@ export class OpportunitiesComponent {
 
   protected readonly limit = 20;
   protected readonly offset = signal(0);
-  protected readonly signalType = signal<SignalType | ''>('');
+  // String, not SignalType, so legacy rows in the dropdown (if any are
+  // ever surfaced via filter) and v2 values both round-trip cleanly.
+  protected readonly signalType = signal<string>('');
 
-  readonly signalTypes: { value: SignalType; label: string }[] = [
-    { value: 'warehouse_opening', label: 'Warehouse Opening' },
-    { value: 'supplier_change', label: 'Supplier Change' },
-    { value: 'hiring_supply_chain_role', label: 'Supply Chain Hiring' },
-  ];
+  readonly signalTypes = SIGNAL_TYPE_OPTIONS;
+
+  /** Render any signal_type string (v2 or legacy) as a human label. */
+  protected readonly typeLabel = signalTypeLabel;
 
   constructor() {
     this.reload();
@@ -58,7 +62,7 @@ export class OpportunitiesComponent {
   }
 
   onTypeChange(value: string): void {
-    this.signalType.set(value as SignalType | '');
+    this.signalType.set(value);
     this.offset.set(0);
     this.reload();
   }

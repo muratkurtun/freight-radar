@@ -1,74 +1,46 @@
-"""Rule-based candidate prefilter (runs BEFORE the LLM).
+"""Coarse keyword gate that runs BEFORE the LLM.
 
-A cheap keyword / regex pass over the normalized title+content of a raw
-item. It answers one question per item:
+Post-pivot the detector is a single broad recall-first filter, not a
+per-type classifier. The LLM (constrained by tenant preferences) does
+the real categorization; the gate's job is to keep clearly-irrelevant
+items (sports, weather, lifestyle, opinion columns) from running up
+the OpenAI bill.
 
-    "Is this worth spending LLM tokens on, and if so, for which
-     signal types?"
+Cost guardrails enforced here:
+    * Empty / very short content                → False
+    * Title and content both missing            → False
+    * No business-relevance keyword in the text → False (NEWS only)
+    * JOB_BOARD source                          → True (every posting
+                                                  is potentially a
+                                                  hiring signal)
 
-Design principles
------------------
-* Tuned for recall, not precision. A false positive here costs one LLM
-  call (the AI will then decide `is_signal=False`). A false negative
-  drops the item forever, so we err on the side of letting things
-  through.
-* Negative rules are narrow. They only fire on phrases that very
-  reliably mean the opposite of the candidate (e.g. "warehouse closes"
-  rules out a `warehouse_opening` candidate).
-* `hiring_supply_chain_role` uses AND logic: a hiring verb AND a
-  supply-chain role keyword. On a JOB_BOARD source, hiring intent is
-  implicit, so a role keyword alone is enough.
+The verifier has its own MIN_USEFUL_CONTENT_CHARS hard gate as
+defense in depth. Both must agree before tokens are spent.
 
-Integration
------------
-    from app.detectors.candidate_detector import detect_candidate_signals
-
-    candidates = detect_candidate_signals(
-        source_type=source.source_type,
-        title=item.title,
-        content=item.content,
-    )
-    if not candidates:
-        # no plausible signal -> skip the LLM call entirely
-        continue
-    result = signal_detector.detect(...)   # only now pay for tokens
-
-No DB, no tenant context, no AI calls live in this module.
+No DB, no tenant context, no LLM calls live in this module.
 """
 from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass
-from typing import Callable
 
-from app.domain.enums import SignalType, SourceType
+from app.domain.enums import SourceType
 
-
-@dataclass(slots=True, kw_only=True, frozen=True)
-class Candidate:
-    """One plausible SignalType for a raw item, with the phrases that matched.
-
-    `score` is the number of distinct matched phrases (higher = stronger
-    candidate). It is NOT a probability and must not leak into confidence
-    on DetectedSignal — that's the LLM's job."""
-
-    signal_type: SignalType
-    score: int
-    matched: tuple[str, ...]
+# Items shorter than this are classified as too-thin without spending
+# LLM tokens. Keep aligned with verifier MIN_USEFUL_CONTENT_CHARS — both
+# must accept the item before the verifier calls the API.
+MIN_GATE_CONTENT_CHARS = 50
 
 
 # --------------------------------------------------------------------------
-# Normalization
+# Normalization (Turkish-aware)
 # --------------------------------------------------------------------------
 
 _WS = re.compile(r"\s+")
 
-# Turkish-specific fold map. NFKD alone does not decompose ş / ğ / ı
-# cleanly, so we translate them explicitly. Applied to BOTH the keyword
-# lists (at module load) and the haystack (at detect time), which means
-# authors can write keywords naturally with Turkish characters and a
-# news article that drops accents still matches.
+# NFKD alone does not decompose ş / ğ / ı cleanly, so translate them
+# explicitly. Applied to BOTH the keyword set (at module load) and the
+# haystack (at gate time).
 _TR_FOLD = str.maketrans(
     {
         "ç": "c", "Ç": "c",
@@ -91,121 +63,85 @@ def _normalize(text: str | None) -> str:
 
 
 # --------------------------------------------------------------------------
-# Keyword groups (authored in source language; normalized at compile time)
+# Broad-gate keyword set
+#
+# Tuned for RECALL: a false positive costs one LLM call (which will then
+# decide is_signal=False); a false negative drops the item forever. The
+# set covers the surface phrases of every v2 SignalType plus the most
+# common framings around expansion / hiring / investment / supply-chain
+# pain. Authored in source language; normalized at module load so authors
+# can write naturally with Turkish characters.
 # --------------------------------------------------------------------------
 
-_WAREHOUSE_OPENING_POS: tuple[str, ...] = (
-    # EN — explicit new-facility phrases
-    "new warehouse",
-    "new distribution center", "new distribution centre",
-    "new fulfillment center", "new fulfilment centre",
-    "new logistics center", "new logistics centre",
-    "new logistics hub",
-    "opens warehouse", "opens a warehouse", "opens new warehouse",
-    "opens distribution center", "opens distribution centre",
-    "opens fulfillment center", "opens fulfilment centre",
-    "opens logistics center", "opens logistics centre",
-    "warehouse opening",
-    "ground breaking", "groundbreaking",
-    "ribbon cutting",
-    "inaugurates warehouse", "inaugurates distribution center",
-    "launches warehouse", "launches distribution center",
-    "expands warehouse", "expanding warehouse",
-    "adds warehouse capacity",
-    # TR
-    "yeni depo",
-    "yeni lojistik merkezi",
-    "yeni dagitim merkezi",
-    "depo acilisi", "depo acilis",
-    "lojistik merkezi acilisi",
-    "dagitim merkezi acilisi",
-)
+_BUSINESS_KEYWORDS: tuple[str, ...] = (
+    # Expansion / new operations
+    "expand", "expansion", "expanding",
+    "open", "opens", "opened", "opening",
+    "launch", "launches", "launched",
+    "inaugurate", "inaugurated", "inauguration",
+    "ground breaking", "groundbreaking", "ribbon cutting",
+    "new factory", "new plant", "new facility",
+    "new warehouse", "new distribution center", "new fulfillment center",
+    "new logistics center", "new logistics hub",
+    "new production line",
+    "new market", "new country", "enters market",
 
-_WAREHOUSE_OPENING_NEG: tuple[str, ...] = (
-    "warehouse closes", "warehouse closed", "closing warehouse",
-    "shuts warehouse", "warehouse shutdown",
-    "warehouse layoff", "warehouse layoffs",
-    "warehouse fire",
-    "depo kapanisi", "depo kapandi",
-)
+    # Capacity / investment
+    "capacity increase", "increase capacity", "capacity expansion",
+    "production capacity",
+    "investment", "invests", "invested",
+    "incentive", "subsidy",
+    "funding round", "raised", "series a", "series b",
 
-_SUPPLIER_CHANGE_POS: tuple[str, ...] = (
-    # EN
-    "new supplier",
-    "new logistics partner",
-    "new logistics provider",
-    "new 3pl",
-    "selects logistics provider",
-    "selects as supplier", "selected as supplier",
-    "logistics partner",
-    "partners with", "partnered with", "partnership with",
-    "signs agreement", "signed agreement",
-    "signs contract", "signed contract",
-    "awarded contract", "awards contract",
-    "supply agreement",
-    "ends partnership", "terminates contract", "terminated contract",
-    "switches supplier", "replaces supplier",
-    "outsources logistics", "outsourcing agreement",
-    # TR
-    "yeni tedarikci",
-    "tedarikci degisikligi",
-    "yeni lojistik ortagi", "yeni lojistik partner",
-    "anlasma imzaladi", "sozlesme imzaladi",
-)
+    # Trade / cross-border
+    "export", "exports", "exporting", "exported",
+    "import", "imports", "importing",
+    "ihracat", "ithalat",
+    "customs", "gumruk",
 
-_SUPPLIER_CHANGE_NEG: tuple[str, ...] = (
-    # These are PR events about suppliers, not actual supplier changes.
-    "supplier conference", "supplier day", "supplier event", "supplier awards",
-)
-
-_HIRING_VERBS: tuple[str, ...] = (
-    # Intent-to-hire signals. Only meaningful in AND with a role keyword.
-    "hiring", "now hiring", "we are hiring", "were hiring", "we're hiring",
-    "job opening", "job openings", "job vacancy",
-    "open position", "open positions",
-    "apply now", "join our team",
-    # TR
-    "is ilani", "ise alim", "acik pozisyon", "basvuru",
-)
-
-_SUPPLY_ROLES: tuple[str, ...] = (
-    # EN
-    "supply chain",
-    "logistics manager", "logistics coordinator", "logistics specialist",
-    "logistics analyst", "logistics director",
-    "procurement", "sourcing manager",
-    "warehouse manager", "warehouse supervisor",
-    "warehouse operator", "warehouse associate",
-    "fleet manager", "fleet operations",
-    "freight", "freight forwarder", "forwarding",
-    "transportation manager", "transport manager",
+    # Hiring (broad — verifier disambiguates type)
+    "hiring", "we are hiring", "join our team",
+    "open position", "open positions", "job opening",
+    "is ilani", "ise alim", "acik pozisyon",
+    "logistics manager", "supply chain", "tedarik zinciri",
+    "export manager", "import manager",
+    "warehouse manager", "depo muduru",
+    "freight forwarder", "forwarding",
     "customs broker",
-    "3pl manager",
-    "demand planner", "distribution planner",
-    # TR
-    "tedarik zinciri",
-    "lojistik uzmani", "lojistik sorumlusu", "lojistik muduru",
-    "satin alma uzmani", "satin alma muduru",
-    "depo sorumlusu", "depo muduru",
-    "nakliye",
-    "gumruk",
-    "ithalat ihracat",
+
+    # Distribution / e-commerce
+    "distributor", "distributorship", "dealership",
+    "retail expansion", "store opening",
+    "ecommerce", "e-commerce", "fulfillment", "fulfilment",
+    "online store", "marketplace launch",
+
+    # Tenders / contracts / deals
+    "tender", "contract", "agreement", "deal",
+    "awarded", "awards contract", "signs agreement",
+    "ihale", "sozlesme", "anlasma",
+    "partners with", "partnership with",
+
+    # Supply chain pain
+    "supply chain disruption", "shortage", "logistics problem",
+    "shipping delay", "delivery delay",
+    "tedarik sorunu",
+
+    # Turkish equivalents for the most common positives so a TR-only
+    # newsroom matches without an English keyword needing to leak in.
+    "yeni depo", "yeni fabrika", "yeni tesis",
+    "yeni dagitim merkezi", "yeni lojistik merkezi",
+    "depo acilisi",
+    "kapasite artisi",
+    "yeni pazar", "yeni ulkeye",
+    "bayilik", "distributorluk",
+    "yatirim tesvigi", "tesvik belgesi",
 )
 
 
-# --------------------------------------------------------------------------
-# Compile
-# --------------------------------------------------------------------------
-
-def _compile(phrases: tuple[str, ...]) -> re.Pattern[str] | None:
-    """Compile phrases into one alternation with word boundaries.
-
-    Word boundaries (\\b) prevent "fleet" from matching "fleeting" and
-    "depo" from matching "depolama". Longest-first ordering gives
-    deterministic overlap behavior so `supply chain` wins over `supply`.
-    """
-    if not phrases:
-        return None
+def _compile(phrases: tuple[str, ...]) -> re.Pattern[str]:
+    """One alternation with word boundaries so 'fleet' doesn't match
+    'fleeting' and 'depo' doesn't match 'depolama'. Longest-first so
+    overlapping phrases pick the most specific match deterministically."""
     seen: set[str] = set()
     patterns: list[str] = []
     for raw in phrases:
@@ -214,120 +150,53 @@ def _compile(phrases: tuple[str, ...]) -> re.Pattern[str] | None:
             continue
         seen.add(norm)
         patterns.append(rf"\b{re.escape(norm)}\b")
-    if not patterns:
-        return None
     patterns.sort(key=len, reverse=True)
     return re.compile("|".join(patterns))
 
 
-_WH_POS = _compile(_WAREHOUSE_OPENING_POS)
-_WH_NEG = _compile(_WAREHOUSE_OPENING_NEG)
-_SUP_POS = _compile(_SUPPLIER_CHANGE_POS)
-_SUP_NEG = _compile(_SUPPLIER_CHANGE_NEG)
-_HIRING_VERBS_PAT = _compile(_HIRING_VERBS)
-_SUPPLY_ROLES_PAT = _compile(_SUPPLY_ROLES)
-
-
-def _find_unique(pattern: re.Pattern[str] | None, haystack: str) -> tuple[str, ...]:
-    if pattern is None:
-        return ()
-    seen: set[str] = set()
-    matches: list[str] = []
-    for m in pattern.finditer(haystack):
-        text = m.group(0)
-        if text in seen:
-            continue
-        seen.add(text)
-        matches.append(text)
-    return tuple(matches)
-
-
-# --------------------------------------------------------------------------
-# Per-type detection
-# --------------------------------------------------------------------------
-
-_Detector = Callable[[str, str], "Candidate | None"]
-
-
-def _detect_warehouse_opening(text: str, source_type: str) -> Candidate | None:
-    if _find_unique(_WH_NEG, text):
-        return None
-    positives = _find_unique(_WH_POS, text)
-    if not positives:
-        return None
-    return Candidate(
-        signal_type=SignalType.WAREHOUSE_OPENING,
-        score=len(positives),
-        matched=positives,
-    )
-
-
-def _detect_supplier_change(text: str, source_type: str) -> Candidate | None:
-    if _find_unique(_SUP_NEG, text):
-        return None
-    positives = _find_unique(_SUP_POS, text)
-    if not positives:
-        return None
-    return Candidate(
-        signal_type=SignalType.SUPPLIER_CHANGE,
-        score=len(positives),
-        matched=positives,
-    )
-
-
-def _detect_hiring_supply_chain(text: str, source_type: str) -> Candidate | None:
-    roles = _find_unique(_SUPPLY_ROLES_PAT, text)
-    if not roles:
-        return None
-    # Job-board items are implicitly "we are hiring"; no verb required.
-    if source_type == SourceType.JOB_BOARD.value:
-        verbs: tuple[str, ...] = ()
-    else:
-        verbs = _find_unique(_HIRING_VERBS_PAT, text)
-        if not verbs:
-            return None
-    return Candidate(
-        signal_type=SignalType.HIRING_SUPPLY_CHAIN_ROLE,
-        score=len(roles) + len(verbs),
-        matched=roles + verbs,
-    )
-
-
-_DETECTORS: tuple[_Detector, ...] = (
-    _detect_warehouse_opening,
-    _detect_supplier_change,
-    _detect_hiring_supply_chain,
-)
+_GATE_PATTERN = _compile(_BUSINESS_KEYWORDS)
 
 
 # --------------------------------------------------------------------------
 # Public API
 # --------------------------------------------------------------------------
 
-def detect_candidate_signals(
+def is_business_relevant(
     *,
     source_type: str,
     title: str | None,
     content: str,
-) -> list[Candidate]:
-    """Return zero or more Candidate hints for the item.
+) -> bool:
+    """Coarse logistics-lead relevance gate.
 
-    Empty list   -> do NOT call the LLM (item is not a plausible signal).
-    Non-empty    -> call the LLM; the hints may be passed to the prompt
-                     as additional context.
+    Returns True when an item is plausibly worth running through the LLM,
+    False when it should be dropped without any LLM call.
+
+    Job-board items always pass — every posting is a potential hiring
+    signal and the role keyword set already lives in the verifier prompt.
     """
-    haystack = _normalize(f"{title or ''} {content}")
-    if not haystack:
-        return []
+    if source_type == SourceType.JOB_BOARD.value:
+        # Still require *some* content so a totally empty job posting
+        # gets dropped here instead of failing in the verifier.
+        return bool((content or "").strip()) or bool((title or "").strip())
 
-    out: list[Candidate] = []
-    for detector in _DETECTORS:
-        c = detector(haystack, source_type)
-        if c is not None:
-            out.append(c)
-    return out
+    haystack = _normalize(f"{title or ''} {content or ''}")
+    if len(haystack) < MIN_GATE_CONTENT_CHARS:
+        return False
+    return _GATE_PATTERN.search(haystack) is not None
 
 
-def should_call_llm(candidates: list[Candidate]) -> bool:
-    """Explicit gate the pipeline calls before spending LLM tokens."""
-    return bool(candidates)
+def should_call_llm(
+    *,
+    source_type: str,
+    title: str | None,
+    content: str,
+) -> bool:
+    """Explicit gate the pipeline calls before spending LLM tokens.
+
+    A thin alias over `is_business_relevant`. Keeping the named helper
+    makes the call site readable: `if not should_call_llm(...): continue`.
+    """
+    return is_business_relevant(
+        source_type=source_type, title=title, content=content
+    )
