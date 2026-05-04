@@ -47,6 +47,14 @@ export interface Opportunity {
   source_id: string;
   source_name: string;
   source_type: SourceType;
+
+  // Team feedback aggregates (populated server-side from signal_feedback).
+  // All optional so older API payloads (pre-feedback-loop) still
+  // deserialize cleanly.
+  feedback_count?: number;
+  last_feedback_action?: string | null;
+  last_feedback_at?: string | null;
+  last_feedback_user_id?: string | null;
 }
 
 export type PagedOpportunities = Paged<Opportunity>;

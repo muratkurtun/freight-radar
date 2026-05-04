@@ -43,6 +43,53 @@ class UrgencyLevel(StrEnum):
     HIGH = "high"
 
 
+class FeedbackAction(StrEnum):
+    """Sales-team feedback lifecycle actions on a detected signal.
+
+    Distinct from `ReviewAction` (admin approve/reject) — feedback is a
+    sales-side, append-only history. The first six are positive /
+    lifecycle actions; the last three are corrective negatives that
+    overlap with `FeedbackReason` so the UI can surface a granular
+    reason directly as an action when that's clearer for the user.
+    """
+
+    RELEVANT = "relevant"
+    NOT_RELEVANT = "not_relevant"
+    QUALIFIED = "qualified"
+    CONTACTED = "contacted"
+    CONVERTED = "converted"
+    DISMISSED = "dismissed"
+    WRONG_COMPANY = "wrong_company"
+    WRONG_SECTOR = "wrong_sector"
+    NOT_A_LOGISTICS_LEAD = "not_a_logistics_lead"
+
+
+class FeedbackReason(StrEnum):
+    """Structured 'why' attached to a negative / corrective feedback.
+
+    Optional in general — the UI only requires it for negative actions
+    (NOT_RELEVANT, DISMISSED, WRONG_*, NOT_A_LOGISTICS_LEAD)."""
+
+    WRONG_COMPANY = "wrong_company"
+    WRONG_SECTOR = "wrong_sector"
+    NOT_A_LOGISTICS_LEAD = "not_a_logistics_lead"
+    DUPLICATE = "duplicate"
+    LOW_CONFIDENCE = "low_confidence"
+
+
+# Actions that require a structured reason at the API layer. Must stay
+# in sync with the frontend's REASON_REQUIRED_ACTIONS set.
+NEGATIVE_FEEDBACK_ACTIONS: frozenset[FeedbackAction] = frozenset(
+    {
+        FeedbackAction.NOT_RELEVANT,
+        FeedbackAction.DISMISSED,
+        FeedbackAction.WRONG_COMPANY,
+        FeedbackAction.WRONG_SECTOR,
+        FeedbackAction.NOT_A_LOGISTICS_LEAD,
+    }
+)
+
+
 class RecommendedService(StrEnum):
     """Controlled vocabulary for `detected_signals.recommended_services`.
     The LLM is constrained to this set; out-of-vocabulary values are

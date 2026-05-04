@@ -200,3 +200,112 @@
     color: var(--accent);
   }
 }
+
+// ---- Feedback ----------------------------------------------------------
+
+.status-cell {
+  white-space: nowrap;
+}
+
+.fb-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.fb-relevant     { background: #dcfce7; color: #166534; }
+.fb-qualified    { background: #dbeafe; color: #1e40af; }
+.fb-contacted    { background: #ede9fe; color: #5b21b6; }
+.fb-converted    { background: #fef3c7; color: #854d0e; }
+.fb-not-relevant { background: #fee2e2; color: #991b1b; }
+.fb-dismissed    { background: #e2e8f0; color: #475569; }
+.fb-none         { background: #f1f5f9; color: #94a3b8; }
+
+.reason-row td {
+  background: #fffbeb;
+  border-top: 1px dashed var(--border);
+  padding: 12px 20px;
+}
+
+.reason-form {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 8px 16px;
+
+  .reason-form-head {
+    grid-column: 1 / -1;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--muted);
+
+    &.full { grid-column: 1 / -1; }
+
+    select, textarea {
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #fff;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+    }
+
+    textarea { resize: vertical; }
+  }
+}
+
+.reason-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.lead-feedback {
+  grid-column: 1 / -1;
+  border-top: 1px dashed var(--border);
+  padding-top: 10px;
+
+  .fb-action-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .fb-history {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+
+    li {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .fb-note {
+      color: var(--text);
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 12px;
+    }
+  }
+}

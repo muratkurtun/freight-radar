@@ -6,6 +6,9 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.domain.enums import (
+    NEGATIVE_FEEDBACK_ACTIONS,
+    FeedbackAction,
+    FeedbackReason,
     PipelineRunStatus,
     ReviewStatus,
     SignalType,
@@ -214,6 +217,41 @@ class ReviewDecisionRequest(BaseModel):
         return self
 
 
+# ---- Feedback ----
+
+class FeedbackCreate(BaseModel):
+    """Sales-team feedback on a signal.
+
+    Backend rule: a structured `reason` is required when the action is
+    a negative / corrective one (NOT_RELEVANT, DISMISSED, WRONG_*,
+    NOT_A_LOGISTICS_LEAD). For positive lifecycle actions (RELEVANT,
+    QUALIFIED, CONTACTED, CONVERTED) reason is optional.
+    """
+
+    action: FeedbackAction
+    reason: FeedbackReason | None = None
+    note: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _negative_action_needs_reason(self) -> "FeedbackCreate":
+        if self.action in NEGATIVE_FEEDBACK_ACTIONS and self.reason is None:
+            raise ValueError(
+                f"reason is required for action='{self.action.value}'"
+            )
+        return self
+
+
+class FeedbackRead(ORMModel):
+    id: UUID
+    tenant_id: UUID
+    signal_id: UUID
+    user_id: UUID
+    action: FeedbackAction
+    reason: FeedbackReason | None = None
+    note: str | None = None
+    created_at: datetime
+
+
 # ---- Opportunities ----
 
 class OpportunityRead(BaseModel):
@@ -255,6 +293,13 @@ class OpportunityRead(BaseModel):
     source_id: UUID
     source_name: str
     source_type: SourceType
+
+    # Team feedback aggregates derived from signal_feedback. All optional
+    # — null on signals that have not received any feedback yet.
+    feedback_count: int = 0
+    last_feedback_action: str | None = None
+    last_feedback_at: datetime | None = None
+    last_feedback_user_id: UUID | None = None
 
 
 # ---- Feedback / analytics ----

@@ -89,6 +89,7 @@
         <th>Recommended Service</th>
         <th>Confidence</th>
         <th>Urgency</th>
+        <th>Team Status</th>
         <th>Created</th>
         <th class="actions-col">Actions</th>
       </tr>
@@ -126,6 +127,18 @@
           <td>
             <span [class]="urgencyClass(op.urgency)">{{ op.urgency || 'n/a' }}</span>
           </td>
+          <td class="status-cell">
+            @if (op.last_feedback_action) {
+              <span [class]="badgeClass(op.last_feedback_action)">
+                {{ actionLabel(op.last_feedback_action) }}
+              </span>
+              @if ((op.feedback_count ?? 0) > 1) {
+                <span class="muted small"> · {{ op.feedback_count }} feedbacks</span>
+              }
+            } @else {
+              <span class="muted small">—</span>
+            }
+          </td>
           <td>{{ op.created_at | date: 'yyyy-MM-dd HH:mm' }}</td>
           <td class="row-actions">
             <button
@@ -150,9 +163,58 @@
             </button>
           </td>
         </tr>
+
+        <!-- Inline reason / note prompt for negative actions -->
+        @if (isReasonPromptOpenFor(op.signal_id)) {
+          <tr class="reason-row">
+            <td colspan="11">
+              <div class="reason-form">
+                <div class="reason-form-head">
+                  <span class="muted small">Action:</span>
+                  <strong>{{ pendingActionLabel() }}</strong>
+                </div>
+                <label>
+                  <span>Reason</span>
+                  <select
+                    [ngModel]="pendingReason()"
+                    (ngModelChange)="pendingReason.set($event)"
+                  >
+                    <option value="">Select a reason…</option>
+                    @for (opt of reasonOptions; track opt.value) {
+                      <option [value]="opt.value">{{ opt.label }}</option>
+                    }
+                  </select>
+                </label>
+                <label class="full">
+                  <span>Note (optional)</span>
+                  <textarea
+                    rows="2"
+                    [ngModel]="pendingNote()"
+                    (ngModelChange)="pendingNote.set($event)"
+                  ></textarea>
+                </label>
+                <div class="reason-actions">
+                  <button class="btn" type="button" (click)="cancelReasonPrompt()">
+                    Cancel
+                  </button>
+                  <button
+                    class="btn primary"
+                    type="button"
+                    (click)="confirmReasonPrompt(op)"
+                    [disabled]="!pendingReason() || submittingFor() === op.signal_id"
+                  >
+                    {{ submittingFor() === op.signal_id ? 'Saving…' : 'Submit' }}
+                  </button>
+                </div>
+              </div>
+            </td>
+          </tr>
+        }
+
+        <!-- Expandable detail / feedback panel -->
         @if (expandedId() === op.signal_id) {
           <tr class="lead-detail-row">
-            <td colspan="10">
+            <td colspan="11">
               <div class="lead-detail">
                 @if (op.why_relevant_for_logistics) {
                   <section>
@@ -207,6 +269,43 @@
                   @if (op.raw_title) { <span>· {{ op.raw_title }}</span> }
                   @if (op.raw_url) {
                     <a [href]="op.raw_url" target="_blank" rel="noopener noreferrer">Open</a>
+                  }
+                </section>
+
+                <!-- Feedback actions -->
+                <section class="lead-feedback">
+                  <h4>Team feedback</h4>
+                  <div class="fb-action-row">
+                    @for (a of feedbackActions; track a.value) {
+                      <button
+                        class="btn small"
+                        type="button"
+                        (click)="onFeedbackClick(op, a.value)"
+                        [disabled]="submittingFor() === op.signal_id"
+                      >
+                        {{ a.label }}
+                      </button>
+                    }
+                  </div>
+                  @if (historyLoading()) {
+                    <div class="muted small">Loading history…</div>
+                  } @else if (historyItems().length === 0) {
+                    <div class="muted small">No feedback yet.</div>
+                  } @else {
+                    <ul class="fb-history">
+                      @for (h of historyItems(); track h.id) {
+                        <li>
+                          <span [class]="badgeClass(h.action)">{{ actionLabel(h.action) }}</span>
+                          @if (h.reason) {
+                            <span class="muted small">· {{ h.reason }}</span>
+                          }
+                          @if (h.note) {
+                            <span class="fb-note">{{ h.note }}</span>
+                          }
+                          <span class="muted small">{{ h.created_at | date: 'yyyy-MM-dd HH:mm' }}</span>
+                        </li>
+                      }
+                    </ul>
                   }
                 </section>
               </div>

@@ -288,6 +288,52 @@ class DetectedSignal(Base):
     )
 
 
+class SignalFeedback(Base):
+    """Append-only sales-team feedback on a detected signal.
+
+    History is preserved: a (signal, user) pair can have many rows. The
+    'current team status' is the row with MAX(created_at) for the
+    signal across all tenant users — see opportunities SQL for the
+    aggregate query."""
+
+    __tablename__ = "signal_feedback"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('relevant','not_relevant','qualified','contacted',"
+            "'converted','dismissed','wrong_company','wrong_sector',"
+            "'not_a_logistics_lead')",
+            name="ck_signal_feedback_action",
+        ),
+        CheckConstraint(
+            "reason IS NULL OR reason IN ('wrong_company','wrong_sector',"
+            "'not_a_logistics_lead','duplicate','low_confidence')",
+            name="ck_signal_feedback_reason",
+        ),
+        Index("ix_signal_feedback_signal_created", "signal_id", "created_at"),
+        Index("ix_signal_feedback_tenant_created", "tenant_id", "created_at"),
+        Index("ix_signal_feedback_user", "user_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    signal_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("detected_signals.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("app_users.id", ondelete="RESTRICT"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class TenantSignalPreference(Base):
     """One row per tenant. Drives which platform sources the pipeline
     iterates for that tenant via tag intersection."""
