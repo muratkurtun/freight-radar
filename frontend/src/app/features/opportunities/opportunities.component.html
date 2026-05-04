@@ -1,75 +1,228 @@
 <header class="page-head">
   <div>
-    <h2>Opportunities</h2>
-    <p>Onaylanmış sinyaller.</p>
+    <h2>Leads</h2>
+    <p>Approved logistics opportunities — at a glance, why each lead matters.</p>
   </div>
   <div class="filters">
     <select (change)="onTypeChange($any($event.target).value)">
-      <option value="">Tüm tipler</option>
+      <option value="">All signal types</option>
       @for (opt of signalTypes; track opt.value) {
         <option [value]="opt.value" [selected]="signalType() === opt.value">
           {{ opt.label }}
         </option>
       }
     </select>
-    <button class="btn" type="button" (click)="reload()">Yenile</button>
+    <button class="btn" type="button" (click)="reload()">Refresh</button>
   </div>
 </header>
 
+<section class="lead-filters">
+  <div class="lead-filter-group">
+    <label>
+      <span>Sector</span>
+      <select [ngModel]="sectorFilter()" (ngModelChange)="sectorFilter.set($event)">
+        <option value="">Any</option>
+        @for (opt of sectors; track opt.value) {
+          <option [value]="opt.value">{{ opt.label }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span>Region</span>
+      <select [ngModel]="regionFilter()" (ngModelChange)="regionFilter.set($event)">
+        <option value="">Any</option>
+        @for (opt of regions; track opt.value) {
+          <option [value]="opt.value">{{ opt.label }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span>Urgency</span>
+      <select [ngModel]="urgencyFilter()" (ngModelChange)="urgencyFilter.set($event)">
+        <option value="">Any</option>
+        @for (opt of urgencies; track opt.value) {
+          <option [value]="opt.value">{{ opt.label }}</option>
+        }
+      </select>
+    </label>
+    <label class="confidence-slider">
+      <span>Min confidence: <strong>{{ minConfidence().toFixed(2) }}</strong></span>
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.05"
+        [ngModel]="minConfidence()"
+        (ngModelChange)="minConfidence.set(+$event)"
+      />
+    </label>
+    <button class="btn ghost" type="button" (click)="clearFilters()">Clear</button>
+  </div>
+  <div class="filter-note muted small">
+    Sector, region, urgency and min-confidence filters apply to the current page only.
+  </div>
+</section>
+
+@if (info(); as msg) {
+  <div class="state success" style="margin-bottom: 12px;">{{ msg }}</div>
+}
+
 @if (loading()) {
-  <div class="state">Yükleniyor…</div>
+  <div class="state">Loading…</div>
 } @else if (error(); as err) {
   <div class="state error">{{ err }}</div>
 } @else if (items().length === 0) {
-  <div class="state muted">Kayıt yok.</div>
+  <div class="state muted">
+    No leads yet. Adjust your targeting or run the pipeline to discover new opportunities.
+  </div>
+} @else if (visible().length === 0) {
+  <div class="state muted">No leads match the current filters.</div>
 } @else {
-  <table>
+  <table class="lead-table">
     <thead>
       <tr>
-        <th>Tip</th>
-        <th>Şirket / Konu</th>
-        <th>Lokasyon</th>
-        <th>Kaynak</th>
+        <th>Company</th>
+        <th>Signal Type</th>
+        <th>Sector</th>
+        <th>Region</th>
+        <th>Logistics Need</th>
+        <th>Recommended Service</th>
         <th>Confidence</th>
-        <th>Tarih</th>
-        <th></th>
+        <th>Urgency</th>
+        <th>Created</th>
+        <th class="actions-col">Actions</th>
       </tr>
     </thead>
     <tbody>
-      @for (op of items(); track op.signal_id) {
-        <tr>
+      @for (op of visible(); track op.signal_id) {
+        <tr class="lead-row" [class.expanded]="expandedId() === op.signal_id">
+          <td>
+            <div class="primary">{{ op.company_name || '—' }}</div>
+            @if (op.detected_event) {
+              <div class="muted small">{{ op.detected_event }}</div>
+            }
+          </td>
           <td><span class="chip">{{ typeLabel(op.signal_type) }}</span></td>
+          <td>{{ op.sector || '—' }}</td>
+          <td>{{ op.region || '—' }}</td>
+          <td class="need-cell">
+            @if (op.potential_logistics_need) {
+              <span [title]="op.potential_logistics_need">{{ op.potential_logistics_need }}</span>
+            } @else { — }
+          </td>
+          <td class="services-cell">
+            @if (op.recommended_services?.length) {
+              @for (s of op.recommended_services; track s) {
+                <span class="service-pill">{{ s }}</span>
+              }
+            } @else { <span class="muted">—</span> }
+          </td>
           <td>
-            <div class="primary">
-              {{ op.company_name || op.supplier_name || op.raw_title || '—' }}
+            <div [class]="confidenceClass(op.confidence)">
+              <div class="bar" [style.width.%]="confidencePct(op.confidence)"></div>
+              <span class="label">{{ confidence(op.confidence) | number: '1.2-2' }}</span>
             </div>
-            @if (op.summary) {
-              <div class="muted small">{{ op.summary }}</div>
-            }
           </td>
-          <td>{{ op.location || '—' }}</td>
           <td>
-            <div>{{ op.source_name }}</div>
-            <div class="muted small">{{ op.source_type }}</div>
+            <span [class]="urgencyClass(op.urgency)">{{ op.urgency || 'n/a' }}</span>
           </td>
-          <td>{{ confidence(op.confidence) | number: '1.2-2' }}</td>
           <td>{{ op.created_at | date: 'yyyy-MM-dd HH:mm' }}</td>
-          <td>
+          <td class="row-actions">
+            <button
+              class="btn small"
+              type="button"
+              (click)="toggleExpand(op.signal_id)"
+            >
+              {{ expandedId() === op.signal_id ? 'Hide' : 'Detail' }}
+            </button>
             @if (op.raw_url) {
-              <a [href]="op.raw_url" target="_blank" rel="noopener">Kaynak</a>
+              <a class="btn small" [href]="op.raw_url" target="_blank" rel="noopener noreferrer">
+                Open Source
+              </a>
             }
+            <button
+              class="btn small"
+              type="button"
+              (click)="copyOutreach(op)"
+              [disabled]="!op.suggested_outreach_message"
+            >
+              Copy Outreach
+            </button>
           </td>
         </tr>
+        @if (expandedId() === op.signal_id) {
+          <tr class="lead-detail-row">
+            <td colspan="10">
+              <div class="lead-detail">
+                @if (op.why_relevant_for_logistics) {
+                  <section>
+                    <h4>Why relevant for logistics</h4>
+                    <p>{{ op.why_relevant_for_logistics }}</p>
+                  </section>
+                }
+                @if (op.potential_logistics_need) {
+                  <section>
+                    <h4>Potential logistics need</h4>
+                    <p>{{ op.potential_logistics_need }}</p>
+                  </section>
+                }
+                @if (op.recommended_services?.length) {
+                  <section>
+                    <h4>Recommended services</h4>
+                    <div class="chips">
+                      @for (s of op.recommended_services; track s) {
+                        <span class="service-pill">{{ s }}</span>
+                      }
+                    </div>
+                  </section>
+                }
+                @if (op.suggested_sales_action) {
+                  <section>
+                    <h4>Suggested sales action</h4>
+                    <p>{{ op.suggested_sales_action }}</p>
+                  </section>
+                }
+                @if (op.suggested_outreach_message) {
+                  <section>
+                    <h4>Suggested outreach message</h4>
+                    <pre class="outreach">{{ op.suggested_outreach_message }}</pre>
+                    <button
+                      class="btn small"
+                      type="button"
+                      (click)="copyOutreach(op)"
+                    >
+                      Copy outreach
+                    </button>
+                  </section>
+                }
+                @if (op.evidence_snippet) {
+                  <section>
+                    <h4>Evidence</h4>
+                    <blockquote>{{ op.evidence_snippet }}</blockquote>
+                  </section>
+                }
+                <section class="lead-source">
+                  <span class="muted small">Source:</span>
+                  <span>{{ op.source_name }}</span>
+                  @if (op.raw_title) { <span>· {{ op.raw_title }}</span> }
+                  @if (op.raw_url) {
+                    <a [href]="op.raw_url" target="_blank" rel="noopener noreferrer">Open</a>
+                  }
+                </section>
+              </div>
+            </td>
+          </tr>
+        }
       }
     </tbody>
   </table>
 
   <footer class="pager">
     <span class="muted">
-      Toplam {{ total() }} · Gösterilen {{ offset() + 1 }}–{{ offset() + items().length }}
+      Total {{ total() }} · Showing {{ offset() + 1 }}–{{ offset() + items().length }}
     </span>
     <div class="spacer"></div>
-    <button type="button" (click)="prev()" [disabled]="offset() === 0">Önceki</button>
-    <button type="button" (click)="next()" [disabled]="offset() + limit >= total()">Sonraki</button>
+    <button type="button" (click)="prev()" [disabled]="offset() === 0">Previous</button>
+    <button type="button" (click)="next()" [disabled]="offset() + limit >= total()">Next</button>
   </footer>
 }
