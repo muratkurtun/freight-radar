@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import auth as auth_router
+from app.api import company_leads as company_leads_router
 from app.api import feedback as feedback_router
 from app.api import opportunities as opportunities_router
 from app.api import pipeline as pipeline_router
@@ -49,6 +50,7 @@ def create_app() -> FastAPI:
     app.include_router(review_router.router)  # legacy /review/* — preserved
     app.include_router(reviews_router.router)
     app.include_router(opportunities_router.router)
+    app.include_router(company_leads_router.router)
     app.include_router(feedback_router.router)
     app.include_router(pipeline_router.trigger_router)
     app.include_router(pipeline_router.runs_router)

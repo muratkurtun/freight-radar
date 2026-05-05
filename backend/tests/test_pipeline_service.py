@@ -99,6 +99,17 @@ class FakePreferenceRepo:
         return self._pref
 
 
+class FakeCompanyRepo:
+    """No-op stand-in for CompanyRepository in pipeline tests.
+
+    Real lookups are covered in test_company_leads.py — here we just
+    need get_or_create to return None so the signal row gets a NULL
+    company_id without exercising the lookup machinery."""
+
+    def get_or_create_by_normalized_name(self, **_kwargs):
+        return None
+
+
 class FakeRawRepo:
     """Captures inserted raw items; mark_processed flips processed flag."""
 
@@ -241,6 +252,7 @@ def _build_service(
     service.raws = raws or FakeRawRepo()
     service.signals = signals or FakeSignalRepo()
     service.runs = runs or FakeRunRepo()
+    service.companies = FakeCompanyRepo()
     service._detector_factory = lambda: detector or FakeDetector()
     # __init__ is skipped via __new__; mirror its config-derived attrs.
     service._max_items_per_run = 0  # 0 disables the cap in tests

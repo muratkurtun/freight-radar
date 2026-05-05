@@ -1,0 +1,153 @@
+<nav class="breadcrumb">
+  <a routerLink="/company-leads">← Company Leads</a>
+</nav>
+
+@if (loading()) {
+  <div class="state">Loading…</div>
+} @else if (error(); as err) {
+  <div class="state error">{{ err }}</div>
+} @else if (data(); as d) {
+  @if (info(); as msg) {
+    <div class="state success" style="margin-bottom: 12px;">{{ msg }}</div>
+  }
+
+  <header class="company-head">
+    <div>
+      <h2>{{ d.company_name }}</h2>
+      <p class="muted small">
+        @if (d.sector) { <span>{{ d.sector }}</span> }
+        @if (d.sector && d.region) { <span> · </span> }
+        @if (d.region) { <span>{{ d.region }}</span> }
+        @if (d.website) {
+          <span> · <a [href]="d.website" target="_blank" rel="noopener noreferrer">{{ d.website }}</a></span>
+        }
+      </p>
+    </div>
+    <div class="company-head-stats">
+      <span [class]="tierBadge(d.lead_tier)">{{ d.lead_tier }}</span>
+      <span class="score-pill">Lead Score <strong>{{ d.highest_lead_score }}</strong></span>
+      <span [class]="statusBadge(d.latest_team_action)">
+        {{ statusLabel(d.latest_team_action) }}
+      </span>
+    </div>
+  </header>
+
+  <section class="overview-grid">
+    <div class="overview-card">
+      <h4>Signals</h4>
+      <p class="big">{{ d.signal_count }}</p>
+      <p class="muted small">Latest {{ d.latest_signal_date | date: 'yyyy-MM-dd HH:mm' }}</p>
+    </div>
+    <div class="overview-card">
+      <h4>Top signal type</h4>
+      @if (d.top_signal_type) {
+        <span class="chip">{{ typeLabel(d.top_signal_type) }}</span>
+      } @else {
+        <span class="muted">—</span>
+      }
+    </div>
+    <div class="overview-card">
+      <h4>Team feedback</h4>
+      @if (d.feedback_counts.total === 0) {
+        <p class="muted">No feedback yet.</p>
+      } @else {
+        <ul class="counts">
+          @if (d.feedback_counts.converted) {
+            <li><span class="fb-badge fb-converted">Converted</span> {{ d.feedback_counts.converted }}</li>
+          }
+          @if (d.feedback_counts.contacted) {
+            <li><span class="fb-badge fb-contacted">Contacted</span> {{ d.feedback_counts.contacted }}</li>
+          }
+          @if (d.feedback_counts.qualified) {
+            <li><span class="fb-badge fb-qualified">Qualified</span> {{ d.feedback_counts.qualified }}</li>
+          }
+          @if (d.feedback_counts.relevant) {
+            <li><span class="fb-badge fb-relevant">Relevant</span> {{ d.feedback_counts.relevant }}</li>
+          }
+          @if (d.feedback_counts.not_relevant) {
+            <li><span class="fb-badge fb-not-relevant">Not Relevant</span> {{ d.feedback_counts.not_relevant }}</li>
+          }
+          @if (d.feedback_counts.dismissed) {
+            <li><span class="fb-badge fb-dismissed">Dismissed</span> {{ d.feedback_counts.dismissed }}</li>
+          }
+        </ul>
+      }
+    </div>
+  </section>
+
+  @if (d.suggested_next_action) {
+    <section class="callout">
+      <h4>Suggested next action</h4>
+      <p>{{ d.suggested_next_action }}</p>
+    </section>
+  }
+
+  @if (d.recommended_services.length) {
+    <section class="callout">
+      <h4>Recommended services</h4>
+      <div class="chips">
+        @for (s of d.recommended_services; track s) {
+          <span class="service-pill">{{ s }}</span>
+        }
+      </div>
+    </section>
+  }
+
+  <section>
+    <h3 class="timeline-head">Signal timeline</h3>
+    @if (d.related_signals.length === 0) {
+      <div class="state muted">No related signals.</div>
+    } @else {
+      <ol class="timeline">
+        @for (s of d.related_signals; track s.signal_id) {
+          <li>
+            <header>
+              <span class="chip">{{ typeLabel(s.signal_type) }}</span>
+              <span class="muted small">{{ s.created_at | date: 'yyyy-MM-dd HH:mm' }}</span>
+              <span [class]="tierBadge(s.lead_tier)">{{ s.lead_tier }}</span>
+              @if (s.current_team_action) {
+                <span [class]="fbBadge(s.current_team_action)">
+                  {{ fbLabel(s.current_team_action) }}
+                </span>
+              }
+              @if (s.urgency) {
+                <span class="muted small">urgency: {{ s.urgency }}</span>
+              }
+              <span class="muted small">conf {{ confidence(s.confidence) | number: '1.2-2' }}</span>
+            </header>
+            @if (s.detected_event) {
+              <p class="event">{{ s.detected_event }}</p>
+            }
+            @if (s.potential_logistics_need) {
+              <p class="muted small">Need: {{ s.potential_logistics_need }}</p>
+            }
+            @if (s.recommended_services.length) {
+              <div class="chips">
+                @for (svc of s.recommended_services; track svc) {
+                  <span class="service-pill">{{ svc }}</span>
+                }
+              </div>
+            }
+            @if (s.suggested_outreach_message) {
+              <details>
+                <summary>Suggested outreach</summary>
+                <pre class="outreach">{{ s.suggested_outreach_message }}</pre>
+                <button class="btn small" type="button" (click)="copyOutreach(s)">
+                  Copy outreach
+                </button>
+              </details>
+            }
+            <div class="row-actions">
+              <span class="muted small">{{ s.source_name }}</span>
+              @if (s.source_url) {
+                <a [href]="s.source_url" target="_blank" rel="noopener noreferrer" class="btn small">
+                  Open source
+                </a>
+              }
+            </div>
+          </li>
+        }
+      </ol>
+    }
+  </section>
+}

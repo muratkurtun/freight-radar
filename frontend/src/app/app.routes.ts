@@ -51,6 +51,13 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'opportunities' },
       {
+        path: 'company-leads',
+        loadChildren: () =>
+          import('./features/company-leads/company-leads.routes').then(
+            (m) => m.COMPANY_LEADS_ROUTES,
+          ),
+      },
+      {
         path: 'opportunities',
         loadChildren: () =>
           import('./features/opportunities/opportunities.routes').then(

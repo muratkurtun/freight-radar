@@ -22,12 +22,22 @@ export class ShellComponent {
   protected store = inject(AuthStore);
 
   readonly navItems = computed<NavItem[]>(() => {
-    const items: NavItem[] = [{ path: '/opportunities', label: 'Opportunities' }];
-    // Tenants pick targeting; the platform admin curates the source pool.
+    const items: NavItem[] = [];
     if (this.store.isPlatformAdmin()) {
-      items.push({ path: '/source-pool', label: 'Source Pool' });
+      // Platform admin works above tenant scope: source curation first,
+      // then their own tenant's leads / opportunities for QA.
+      items.push(
+        { path: '/source-pool', label: 'Source Pool' },
+        { path: '/company-leads', label: 'Company Leads' },
+        { path: '/opportunities', label: 'Opportunities' },
+      );
     } else {
-      items.push({ path: '/targeting', label: 'Targeting' });
+      // Sales-team primary screen sits at the top.
+      items.push(
+        { path: '/company-leads', label: 'Company Leads' },
+        { path: '/opportunities', label: 'Opportunities' },
+        { path: '/targeting', label: 'Targeting' },
+      );
     }
     if (this.store.isAdmin()) {
       items.push(

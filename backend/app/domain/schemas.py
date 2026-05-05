@@ -363,6 +363,98 @@ class PipelineTriggerResponse(BaseModel):
     message: str
 
 
+# ---- Company Leads ----
+
+class FeedbackCounts(BaseModel):
+    """Per-company breakdown of feedback rows by action.
+
+    Mirrors the FeedbackAction enum 1:1 plus a `total` summing all
+    actions. All zeros on companies without any feedback yet."""
+
+    relevant: int = 0
+    qualified: int = 0
+    contacted: int = 0
+    converted: int = 0
+    dismissed: int = 0
+    not_relevant: int = 0
+    wrong_company: int = 0
+    wrong_sector: int = 0
+    not_a_logistics_lead: int = 0
+    total: int = 0
+
+
+class CompanyLeadSummary(BaseModel):
+    """Row for the /company-leads list view."""
+
+    company_id: UUID
+    company_name: str
+    normalized_name: str
+    sector: str | None = None
+    region: str | None = None
+    website: str | None = None
+
+    signal_count: int
+    latest_signal_date: datetime
+    top_signal_type: str | None = None
+
+    # `highest_lead_score` and `lead_tier` are computed from confidence
+    # in this phase (no explicit lead_score column yet — see the model
+    # docstring for the formula). Replace once a real score lands.
+    highest_lead_score: int
+    lead_tier: Literal["hot", "warm", "low"]
+
+    recommended_services: list[str] = Field(default_factory=list)
+    latest_detected_event: str | None = None
+    suggested_next_action: str | None = None
+
+    # `latest_team_action` is the priority-derived company status
+    # (converted > contacted > qualified > relevant > dismissed/
+    # not_relevant > new), NOT the timestamp-latest action. The
+    # timestamp lives in `latest_feedback_at`.
+    latest_team_action: Literal[
+        "converted",
+        "contacted",
+        "qualified",
+        "relevant",
+        "dismissed",
+        "not_relevant",
+        "new",
+    ]
+    latest_feedback_at: datetime | None = None
+    feedback_counts: FeedbackCounts
+
+
+class CompanyLeadRelatedSignal(BaseModel):
+    """One signal in the company detail's signal timeline."""
+
+    signal_id: UUID
+    signal_type: str
+    detected_event: str | None = None
+    potential_logistics_need: str | None = None
+    recommended_services: list[str] = Field(default_factory=list)
+    confidence: Decimal
+    lead_score: int
+    lead_tier: Literal["hot", "warm", "low"]
+    urgency: str | None = None
+    source_name: str
+    source_url: str | None = None
+    suggested_outreach_message: str | None = None
+    created_at: datetime
+    current_team_action: str | None = None
+    latest_feedback_at: datetime | None = None
+
+
+class CompanyLeadDetail(CompanyLeadSummary):
+    """/company-leads/{id} response."""
+
+    related_signals: list[CompanyLeadRelatedSignal] = Field(default_factory=list)
+
+
+class PagedCompanyLeads(BaseModel):
+    items: list[CompanyLeadSummary]
+    page: "Page"
+
+
 # ---- Pagination ----
 
 class Page(BaseModel):

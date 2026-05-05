@@ -45,6 +45,7 @@ from app.domain.models import (
     TenantSignalPreference,
 )
 from app.domain.types import SignalResult, SourceItem
+from app.repositories.companies import CompanyRepository
 from app.repositories.pipeline_runs import PipelineRunRepository
 from app.repositories.platform_sources import PlatformSourceRepository
 from app.repositories.raw_items import RawItemRepository
@@ -105,6 +106,7 @@ class PipelineService:
         self.raws = RawItemRepository(db, tenant_id)
         self.signals = SignalRepository(db, tenant_id)
         self.runs = PipelineRunRepository(db, tenant_id)
+        self.companies = CompanyRepository(db, tenant_id)
         self._detector_factory = lambda: detector or SignalDetector()
         self._max_items_per_run = get_settings().max_items_per_source_run
 
@@ -453,12 +455,23 @@ class PipelineService:
             )
             return False
 
+        # Resolve / create the tenant-scoped Company entity. Returns
+        # None when the LLM did not extract a usable company name —
+        # SignalResult.is_signal already guards against empty company
+        # before we reach this point, but keep the defensive check.
+        company = self.companies.get_or_create_by_normalized_name(
+            raw_name=result.company_name or "",
+            sector=result.sector,
+            region=result.region,
+        )
+
         signal = DetectedSignal(
             tenant_id=self.tenant_id,
             raw_source_item_id=item.id,
             signal_type=result.signal_type.value,
             confidence=result.confidence,
             signal_hash=shash,
+            company_id=company.id if company is not None else None,
             company_name=result.company_name,
             # v2 logistics-lead fields
             target_customer_type=result.target_customer_type,

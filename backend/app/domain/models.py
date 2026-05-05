@@ -283,7 +283,55 @@ class DetectedSignal(Base):
     review_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default=ReviewStatus.PENDING_REVIEW.value
     )
+    # Lazy link to the tenant's Company entity. Set in PipelineService
+    # when a signal names a company; left NULL for legacy rows and for
+    # signals where the LLM did not extract a company name.
+    company_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class Company(Base):
+    """Tenant-scoped company entity.
+
+    Created lazily when a signal mentions a non-empty company name.
+    `normalized_name` is the deterministic key from
+    app.core.normalization.normalize_company_name and gives the
+    UNIQUE(tenant_id, normalized_name) constraint its semantics —
+    "ABC Foods", "ABC Foods Ltd", "ABC FOODS" collapse onto one row.
+
+    No global registry: two tenants tracking the same brand keep
+    independent rows so feedback / sector / region history doesn't leak
+    across tenants.
+    """
+
+    __tablename__ = "companies"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "normalized_name", name="uq_companies_tenant_normalized"
+        ),
+        Index("ix_companies_tenant", "tenant_id"),
+        Index("ix_companies_tenant_sector", "tenant_id", "sector"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    sector: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    region: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    website: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 

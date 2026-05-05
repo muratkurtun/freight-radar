@@ -1,0 +1,135 @@
+<header class="page-head">
+  <div>
+    <h2>Company Leads</h2>
+    <p>One row per company — every signal, feedback action and recommended service rolled up.</p>
+  </div>
+  <div class="filters">
+    <button class="btn" type="button" (click)="reload()">Refresh</button>
+  </div>
+</header>
+
+<section class="lead-filters">
+  <div class="lead-filter-group">
+    <label>
+      <span>Sector</span>
+      <select [ngModel]="sector()" (ngModelChange)="sector.set($event); applyFilters()">
+        <option value="">Any</option>
+        @for (opt of sectors; track opt.value) {
+          <option [value]="opt.value">{{ opt.label }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span>Region</span>
+      <select [ngModel]="region()" (ngModelChange)="region.set($event); applyFilters()">
+        <option value="">Any</option>
+        @for (opt of regions; track opt.value) {
+          <option [value]="opt.value">{{ opt.label }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span>Lead Tier</span>
+      <select [ngModel]="leadTier()" (ngModelChange)="leadTier.set($any($event)); applyFilters()">
+        <option value="">Any</option>
+        @for (opt of tiers; track opt.value) {
+          <option [value]="opt.value">{{ opt.label }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span>Team Status</span>
+      <select [ngModel]="teamStatus()" (ngModelChange)="teamStatus.set($any($event)); applyFilters()">
+        <option value="">Any</option>
+        @for (opt of statuses; track opt.value) {
+          <option [value]="opt.value">{{ opt.label }}</option>
+        }
+      </select>
+    </label>
+    <label class="confidence-slider">
+      <span>Min score: <strong>{{ minScore() }}</strong></span>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        step="5"
+        [ngModel]="minScore()"
+        (ngModelChange)="minScore.set(+$event)"
+        (mouseup)="applyFilters()"
+        (touchend)="applyFilters()"
+      />
+    </label>
+    <button class="btn ghost" type="button" (click)="clearFilters()">Clear</button>
+  </div>
+</section>
+
+@if (loading()) {
+  <div class="state">Loading…</div>
+} @else if (error(); as err) {
+  <div class="state error">{{ err }}</div>
+} @else if (items().length === 0) {
+  <div class="state muted">
+    No company leads yet. Once approved signals start naming companies, they roll up here.
+  </div>
+} @else {
+  <table>
+    <thead>
+      <tr>
+        <th>Company</th>
+        <th>Sector</th>
+        <th>Region</th>
+        <th>Signals</th>
+        <th>Top Signal</th>
+        <th>Lead Score</th>
+        <th>Tier</th>
+        <th>Team Status</th>
+        <th>Latest</th>
+        <th class="actions-col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (c of items(); track c.company_id) {
+        <tr>
+          <td>
+            <a [routerLink]="['/company-leads', c.company_id]" class="primary">
+              {{ c.company_name }}
+            </a>
+            @if (c.latest_detected_event) {
+              <div class="muted small">{{ c.latest_detected_event }}</div>
+            }
+          </td>
+          <td>{{ c.sector || '—' }}</td>
+          <td>{{ c.region || '—' }}</td>
+          <td>{{ c.signal_count }}</td>
+          <td>
+            @if (c.top_signal_type) {
+              <span class="chip">{{ typeLabel(c.top_signal_type) }}</span>
+            } @else { — }
+          </td>
+          <td><strong>{{ c.highest_lead_score }}</strong></td>
+          <td><span [class]="tierBadge(c.lead_tier)">{{ c.lead_tier }}</span></td>
+          <td>
+            <span [class]="statusBadge(c.latest_team_action)">
+              {{ statusLabel(c.latest_team_action) }}
+            </span>
+          </td>
+          <td>{{ c.latest_signal_date | date: 'yyyy-MM-dd' }}</td>
+          <td class="row-actions">
+            <a class="btn small" [routerLink]="['/company-leads', c.company_id]">
+              View Detail
+            </a>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+
+  <footer class="pager">
+    <span class="muted">
+      Total {{ total() }} · Showing {{ offset() + 1 }}–{{ offset() + items().length }}
+    </span>
+    <div class="spacer"></div>
+    <button type="button" (click)="prev()" [disabled]="offset() === 0">Previous</button>
+    <button type="button" (click)="next()" [disabled]="offset() + limit >= total()">Next</button>
+  </footer>
+}
