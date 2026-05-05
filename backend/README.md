@@ -44,6 +44,14 @@ cd /app
 python scripts/seed_source_pool.py --file seed/source_pool.example.json --dry-run
 ```
 
+> Compose compatibility: examples below use `docker compose` (Compose
+> v2). On hosts still running Compose v1 the equivalent invocation is
+> `docker-compose` — every other argument is identical.
+
+Real production manifests (`seed/source_pool.production.json` etc.)
+are excluded from the repo via `.gitignore`; only the syntactically-
+valid example template is tracked.
+
 `seed/source_pool.example.json` ships as a syntactically-valid template
 with `is_active: false` placeholders only. It uses the RFC-2606
 `example.com` domain, which does not return real feed data — replace
