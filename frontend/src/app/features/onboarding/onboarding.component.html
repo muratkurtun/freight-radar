@@ -1,8 +1,16 @@
 <div class="onboarding-wrap">
   <div class="onboarding-card">
     <header>
-      <h1>Welcome to Opportunity Radar</h1>
-      <p class="subtitle">Tell us what kind of companies you want to discover.</p>
+      @if (isEditMode()) {
+        <h1>Update targeting</h1>
+        <p class="subtitle">Adjust the customer segments and signals you monitor.</p>
+      } @else {
+        <h1>Welcome to Opportunity Radar</h1>
+        <p class="subtitle">Tell us what kind of companies you want to discover.</p>
+      }
+      @if (isEditMode() && canEdit()) {
+        <a class="back-link" (click)="cancelEdit()">← Back to leads</a>
+      }
     </header>
 
     @if (readonly()) {
@@ -45,23 +53,40 @@
 
       @if (isWelcome()) {
         <section class="step-content">
-          <h2>Get started in under 2 minutes</h2>
-          <p>
-            We monitor a curated source pool — managed by the platform —
-            and surface companies that match your targeting. You'll never
-            need to enter URLs, RSS feeds, or technical configuration.
-          </p>
-          <p>
-            On the next four screens, pick the customer types, sectors,
-            regions and signal types your sales team cares about. You can
-            change these later anytime from <strong>Targeting</strong>.
-          </p>
-          <div class="actions">
-            <span></span>
-            <button class="btn primary" type="button" (click)="next()">
-              Get started →
-            </button>
-          </div>
+          @if (isEditMode()) {
+            <h2>Edit your targeting</h2>
+            <p>
+              Walk through the four taxonomies below and adjust your
+              selections. Your existing preferences are pre-filled — you
+              only need to change what's out of date.
+            </p>
+            <div class="actions">
+              <button class="btn ghost" type="button" (click)="cancelEdit()">
+                Cancel
+              </button>
+              <button class="btn primary" type="button" (click)="next()">
+                Continue →
+              </button>
+            </div>
+          } @else {
+            <h2>Get started in under 2 minutes</h2>
+            <p>
+              We monitor a curated source pool — managed by the platform —
+              and surface companies that match your targeting. You'll never
+              need to enter URLs, RSS feeds, or technical configuration.
+            </p>
+            <p>
+              On the next four screens, pick the customer types, sectors,
+              regions and signal types your sales team cares about. You can
+              change these later anytime from <strong>Targeting</strong>.
+            </p>
+            <div class="actions">
+              <span></span>
+              <button class="btn primary" type="button" (click)="next()">
+                Get started →
+              </button>
+            </div>
+          }
         </section>
       } @else if (currentStep(); as step) {
         <section class="step-content">
@@ -102,7 +127,7 @@
         </section>
       } @else if (isFinish()) {
         <section class="step-content">
-          <h2>Review and finish</h2>
+          <h2>{{ isEditMode() ? 'Review changes' : 'Review and finish' }}</h2>
           <p class="muted small">
             Confirm your targeting below. You can change any of it later.
           </p>
@@ -120,7 +145,11 @@
               [checked]="runFirstScan()"
               (change)="runFirstScan.set($any($event.target).checked)"
             />
-            Start discovering leads now (runs the first pipeline scan)
+            @if (isEditMode()) {
+              Run a pipeline scan after saving
+            } @else {
+              Start discovering leads now (runs the first pipeline scan)
+            }
           </label>
           <div class="actions">
             <button class="btn ghost" type="button" (click)="back()" [disabled]="saving()">
@@ -132,7 +161,7 @@
               (click)="finish()"
               [disabled]="saving()"
             >
-              {{ saving() ? 'Saving…' : 'Save and continue' }}
+              {{ saving() ? 'Saving…' : (isEditMode() ? 'Save changes' : 'Save and continue') }}
             </button>
           </div>
         </section>

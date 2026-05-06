@@ -77,7 +77,11 @@ export class OnboardingComponent {
   protected readonly regions = signal<Set<string>>(new Set());
   protected readonly signalFocuses = signal<Set<string>>(new Set());
 
-  protected readonly runFirstScan = signal<boolean>(true);
+  // Trigger the first pipeline run by default for a fresh onboarding;
+  // off for an edit so a small tweak doesn't kick off an unwanted scan.
+  protected readonly runFirstScan = signal<boolean>(
+    !this.store.isOnboardingComplete(),
+  );
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly info = signal<string | null>(null);
@@ -93,6 +97,15 @@ export class OnboardingComponent {
   // PUT /tenant/preferences is admin-only, so showing the wizard
   // controls would be misleading.
   protected readonly readonly = computed(() => !this.canEdit());
+
+  /**
+   * Edit mode is captured ONCE at construction from
+   * `isOnboardingComplete`. Stays stable for the lifetime of the
+   * component so the title doesn't flip back to "Welcome" the moment
+   * the user saves a partial change. An admin who reaches /onboarding
+   * with complete preferences is editing, not onboarding.
+   */
+  protected readonly isEditMode = signal(this.store.isOnboardingComplete());
 
   protected readonly currentStep = computed<ChipStep | null>(() => {
     const idx = this.stepIndex();
@@ -304,8 +317,16 @@ export class OnboardingComponent {
   }
 
   protected stepLabel(idx: number): string {
-    if (idx === WELCOME_INDEX) return 'Welcome';
-    if (idx === FINISH_INDEX) return 'Finish';
+    if (idx === WELCOME_INDEX) return this.isEditMode() ? 'Overview' : 'Welcome';
+    if (idx === FINISH_INDEX) return this.isEditMode() ? 'Save' : 'Finish';
     return CHIP_STEPS[idx - FIRST_CHIP_INDEX].title;
+  }
+
+  /** Used by the "Cancel" link in edit mode so the admin can leave
+   *  the wizard without saving. */
+  cancelEdit(): void {
+    this.router.navigateByUrl('/company-leads').catch(() => {
+      this.router.navigateByUrl('/opportunities');
+    });
   }
 }

@@ -17,8 +17,17 @@
 
   header {
     margin-bottom: 16px;
+    position: relative;
     h1 { margin: 0; font-size: 22px; }
     .subtitle { margin: 6px 0 0 0; color: var(--muted); font-size: 14px; }
+    .back-link {
+      display: inline-block;
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--accent);
+      cursor: pointer;
+      &:hover { text-decoration: underline; }
+    }
   }
 }
 
