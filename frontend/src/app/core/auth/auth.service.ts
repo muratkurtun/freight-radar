@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable, tap } from 'rxjs';
+import { Observable, catchError, of, tap } from 'rxjs';
 
 import { ApiBaseService } from '../http/api-base.service';
 import { AuthStore } from './auth.store';
@@ -10,6 +10,7 @@ import {
   RegisterResponse,
   TokenResponse,
 } from '../models/auth.model';
+import { TenantPreferences } from '../models/preferences.model';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -37,6 +38,26 @@ export class AuthService {
     return this.api
       .get<CurrentUser>('/auth/me')
       .pipe(tap((user) => this.store.setCurrentUser(user)));
+  }
+
+  /**
+   * Fetch + cache the tenant's preferences. Backend returns 404 when
+   * the tenant has not configured them yet; that's a normal first-run
+   * state, not an error — we cache `null` and let `isOnboardingComplete`
+   * derive the badge / redirect behaviour. Any other error leaves the
+   * cache empty so the next attempt retries.
+   */
+  fetchPreferences(): Observable<TenantPreferences | null> {
+    return this.api.get<TenantPreferences>('/tenant/preferences').pipe(
+      tap((prefs) => this.store.setPreferences(prefs)),
+      catchError((err) => {
+        if (err?.status === 404) {
+          this.store.setPreferences(null);
+          return of(null);
+        }
+        return of(null);
+      }),
+    );
   }
 
   logout(): void {

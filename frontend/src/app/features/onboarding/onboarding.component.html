@@ -1,0 +1,142 @@
+<div class="onboarding-wrap">
+  <div class="onboarding-card">
+    <header>
+      <h1>Welcome to Opportunity Radar</h1>
+      <p class="subtitle">Tell us what kind of companies you want to discover.</p>
+    </header>
+
+    @if (readonly()) {
+      <!-- Tenant_user landing — no edit rights, friendly nudge to admin. -->
+      <section class="readonly-state">
+        <h2>Targeting hasn't been configured yet</h2>
+        <p>
+          Your tenant admin needs to pick the customer segments, sectors,
+          regions and signal focuses Opportunity Radar should monitor.
+          Once they do, leads will show up here automatically.
+        </p>
+        <p class="muted small">
+          You can keep this page open and reload after your admin has
+          finished onboarding.
+        </p>
+      </section>
+    } @else {
+      <div class="progress" aria-hidden="true">
+        <div class="progress-bar" [style.width.%]="progressPercent()"></div>
+      </div>
+      <ol class="step-dots">
+        @for (label of [stepLabel(0), stepLabel(1), stepLabel(2), stepLabel(3), stepLabel(4), stepLabel(5)]; track $index) {
+          <li
+            [class.done]="$index < stepIndex()"
+            [class.current]="$index === stepIndex()"
+            (click)="goToStep($index)"
+          >
+            <span class="dot">{{ $index + 1 }}</span>
+            <span class="label">{{ label }}</span>
+          </li>
+        }
+      </ol>
+
+      @if (info(); as msg) {
+        <div class="state success">{{ msg }}</div>
+      }
+      @if (error(); as err) {
+        <div class="state error">{{ err }}</div>
+      }
+
+      @if (isWelcome()) {
+        <section class="step-content">
+          <h2>Get started in under 2 minutes</h2>
+          <p>
+            We monitor a curated source pool — managed by the platform —
+            and surface companies that match your targeting. You'll never
+            need to enter URLs, RSS feeds, or technical configuration.
+          </p>
+          <p>
+            On the next four screens, pick the customer types, sectors,
+            regions and signal types your sales team cares about. You can
+            change these later anytime from <strong>Targeting</strong>.
+          </p>
+          <div class="actions">
+            <span></span>
+            <button class="btn primary" type="button" (click)="next()">
+              Get started →
+            </button>
+          </div>
+        </section>
+      } @else if (currentStep(); as step) {
+        <section class="step-content">
+          <h2>{{ step.title }}</h2>
+          <p>{{ step.description }}</p>
+          <div class="chips">
+            @for (opt of step.options; track opt.value) {
+              <button
+                type="button"
+                class="chip-toggle"
+                [class.selected]="isSelected(step.key, opt.value)"
+                (click)="toggle(step.key, opt.value)"
+              >
+                {{ opt.label }}
+              </button>
+            }
+          </div>
+          <p class="hint muted small">
+            @if (currentSelectionEmpty()) {
+              Pick at least one option to continue.
+            } @else {
+              You can always edit these later from the Targeting page.
+            }
+          </p>
+          <div class="actions">
+            <button class="btn ghost" type="button" (click)="back()">
+              ← Back
+            </button>
+            <button
+              class="btn primary"
+              type="button"
+              (click)="next()"
+              [disabled]="currentSelectionEmpty()"
+            >
+              Next →
+            </button>
+          </div>
+        </section>
+      } @else if (isFinish()) {
+        <section class="step-content">
+          <h2>Review and finish</h2>
+          <p class="muted small">
+            Confirm your targeting below. You can change any of it later.
+          </p>
+          <dl class="summary">
+            @for (s of steps; track s.key) {
+              <div>
+                <dt>{{ s.title }}</dt>
+                <dd>{{ selectionSummary(s.key) }}</dd>
+              </div>
+            }
+          </dl>
+          <label class="run-scan">
+            <input
+              type="checkbox"
+              [checked]="runFirstScan()"
+              (change)="runFirstScan.set($any($event.target).checked)"
+            />
+            Start discovering leads now (runs the first pipeline scan)
+          </label>
+          <div class="actions">
+            <button class="btn ghost" type="button" (click)="back()" [disabled]="saving()">
+              ← Back
+            </button>
+            <button
+              class="btn primary"
+              type="button"
+              (click)="finish()"
+              [disabled]="saving()"
+            >
+              {{ saving() ? 'Saving…' : 'Save and continue' }}
+            </button>
+          </div>
+        </section>
+      }
+    }
+  </div>
+</div>

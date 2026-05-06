@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import {
   adminGuard,
   authGuard,
+  onboardingGuard,
   platformAdminGuard,
   publicGuard,
   trialGuard,
@@ -42,6 +43,19 @@ export const routes: Routes = [
       import('./features/trial/upgrade.component').then((m) => m.UpgradeComponent),
   },
 
+  // Onboarding sits outside the shell so the wizard renders without
+  // sidebar / topbar distractions. trialGuard ensures the user is
+  // authed + subscription-active; onboardingGuard is NOT applied here
+  // (this is the destination — applying it would loop).
+  {
+    path: 'onboarding',
+    canActivate: [trialGuard],
+    loadChildren: () =>
+      import('./features/onboarding/onboarding.routes').then(
+        (m) => m.ONBOARDING_ROUTES,
+      ),
+  },
+
   // --- APP SHELL (authed + subscription active) ---
   {
     path: '',
@@ -50,8 +64,14 @@ export const routes: Routes = [
       import('./layout/shell/shell.component').then((m) => m.ShellComponent),
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'opportunities' },
+      // Targeting + source-pool stay open inside the shell so an admin
+      // can edit preferences without first being shoved through the
+      // wizard. The four lead-facing routes below pick up
+      // onboardingGuard so a tenant member with no preferences gets
+      // redirected to /onboarding before they hit an empty leads list.
       {
         path: 'company-leads',
+        canActivate: [onboardingGuard],
         loadChildren: () =>
           import('./features/company-leads/company-leads.routes').then(
             (m) => m.COMPANY_LEADS_ROUTES,
@@ -59,6 +79,7 @@ export const routes: Routes = [
       },
       {
         path: 'opportunities',
+        canActivate: [onboardingGuard],
         loadChildren: () =>
           import('./features/opportunities/opportunities.routes').then(
             (m) => m.OPPORTUNITY_ROUTES,
@@ -66,13 +87,13 @@ export const routes: Routes = [
       },
       {
         path: 'reviews',
-        canActivate: [adminGuard],
+        canActivate: [adminGuard, onboardingGuard],
         loadChildren: () =>
           import('./features/reviews/reviews.routes').then((m) => m.REVIEWS_ROUTES),
       },
       {
         path: 'pipeline',
-        canActivate: [adminGuard],
+        canActivate: [adminGuard, onboardingGuard],
         loadChildren: () =>
           import('./features/pipeline/pipeline.routes').then((m) => m.PIPELINE_ROUTES),
       },
