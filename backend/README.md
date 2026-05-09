@@ -33,6 +33,42 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 python -m scripts.run_pipeline_once --source-id <uuid>
 ```
 
+## Creating a platform admin
+
+`/auth/register` only ever creates `tenant_admin` users — the request
+schema has no `role` field and `RegistrationService.register` hardcodes
+the role. PLATFORM_ADMIN can therefore only be minted by an operator
+with shell access, via the bootstrap script:
+
+```bash
+# Inside the backend container (PYTHONPATH=/app):
+cd /app
+python scripts/create_platform_admin.py \
+    --email admin@opportunityradar.com \
+    --password '<long-random-string>' \
+    --full-name 'Platform Admin'
+```
+
+`User.tenant_id` is NOT NULL, so the script gets-or-creates a "platform
+tenant" (default slug `platform`, name `Opportunity Radar Platform`).
+Override with `--tenant-slug` / `--tenant-name`.
+
+Re-run safety:
+
+| Scenario | Default | `--update-existing` |
+|----------|---------|---------------------|
+| Email is new                              | create | create              |
+| Email exists in the platform tenant       | rc=2   | promote + reset password |
+| Email exists in a *different* tenant      | rc=2   | rc=2 (refuses to silently move) |
+
+Output: `created user email=… role=platform_admin tenant=platform …`.
+The plain password is never logged.
+
+After creating the admin, log in once via `/auth/login`, hit
+`/source-pool` (or `GET /platform/sources` directly with the bearer
+token) and confirm a 200. A `tenant_admin` token must keep getting 403
+on the same path — that's the contract.
+
 ## Seeding the platform source pool
 
 The source pool is curated centrally — **tenants do not manage source
@@ -48,15 +84,18 @@ python scripts/seed_source_pool.py --file seed/source_pool.example.json --dry-ru
 > v2). On hosts still running Compose v1 the equivalent invocation is
 > `docker-compose` — every other argument is identical.
 
-Real production manifests (`seed/source_pool.production.json` etc.)
-are excluded from the repo via `.gitignore`; only the syntactically-
-valid example template is tracked.
+Real production manifests (`seed/source_pool.production.json`) are
+excluded from the repo via `.gitignore`. Two example templates are
+tracked:
 
-`seed/source_pool.example.json` ships as a syntactically-valid template
-with `is_active: false` placeholders only. It uses the RFC-2606
-`example.com` domain, which does not return real feed data — replace
-the URLs with real ones (`seed/source_pool.production.json` is a
-common convention) before running without `--dry-run`.
+- `seed/source_pool.example.json` — minimal scaffold with
+  `example.com` URLs, used in the dry-run smoke test.
+- `seed/source_pool.production.example.json` — production-shaped
+  template with realistic tag combinations and `is_active: false`
+  placeholders. Copy this to `seed/source_pool.production.json`,
+  replace the `REPLACE-with-real-…` URLs with vetted feeds, and
+  flip `is_active` to `true` per record after the platform admin
+  reviews each one. Source pool is **never** managed by tenant users.
 
 Each record supports: `name`, `source_type` (one of `news`,
 `job_board`, `company_website`), `url`, `is_active`, the four tag

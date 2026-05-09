@@ -42,8 +42,9 @@ tmp/
 
 # 🌱 Seed manifests
 # Real source-pool data is curated by the platform admin and stays out
-# of the repo. Only the syntactically-valid example template is
+# of the repo. Only the syntactically-valid example templates are
 # tracked; anything else under seed/ (e.g. source_pool.production.json)
 # is ignored by default.
 backend/seed/*
 !backend/seed/source_pool.example.json
+!backend/seed/source_pool.production.example.json

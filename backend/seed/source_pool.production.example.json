@@ -1,0 +1,71 @@
+[
+  {
+    "_comment_template": "PRODUCTION TEMPLATE — replace the URLs with real, vetted feeds before running. Records ship is_active=false on purpose; flip to true after the platform admin reviews each entry.",
+    "name": "PRODUCTION TEMPLATE: Vertical News Feed",
+    "source_type": "news",
+    "url": "https://example.com/REPLACE-with-real-news-feed",
+    "is_active": false,
+    "region_tags": ["eu", "global"],
+    "sector_tags": ["logistics", "industrial", "machinery"],
+    "customer_type_tags": ["exporter", "manufacturer"],
+    "signal_focus_tags": ["export_expansion", "new_factory", "capacity_increase"],
+    "language": "en",
+    "priority": 100,
+    "quality_score": 0.80,
+    "noise_level": 0.20,
+    "config": {}
+  },
+  {
+    "_comment_template": "PRODUCTION TEMPLATE: regional trade publication — replace before activating.",
+    "name": "PRODUCTION TEMPLATE: TR Trade News",
+    "source_type": "news",
+    "url": "https://example.com/REPLACE-with-real-tr-trade-feed",
+    "is_active": false,
+    "region_tags": ["turkey"],
+    "sector_tags": ["textile", "machinery", "industrial"],
+    "customer_type_tags": ["exporter", "manufacturer", "importer"],
+    "signal_focus_tags": [
+      "export_expansion",
+      "investment_incentive",
+      "new_factory",
+      "new_market_entry"
+    ],
+    "language": "tr",
+    "priority": 95,
+    "quality_score": 0.75,
+    "noise_level": 0.25,
+    "config": {}
+  },
+  {
+    "_comment_template": "PRODUCTION TEMPLATE: job board — replace url + add the JOB_BOARD selectors the collector expects (see backend/app/collectors/job_board_collector.py).",
+    "name": "PRODUCTION TEMPLATE: Logistics Job Board",
+    "source_type": "job_board",
+    "url": "https://example.com/REPLACE-with-real-jobs-listing",
+    "is_active": false,
+    "region_tags": ["turkey", "eu"],
+    "sector_tags": ["logistics", "retail"],
+    "customer_type_tags": ["exporter", "importer", "distributor", "manufacturer"],
+    "signal_focus_tags": ["hiring_logistics_role", "hiring_export_role"],
+    "language": "en",
+    "priority": 110,
+    "quality_score": 0.70,
+    "noise_level": 0.30,
+    "config": {}
+  },
+  {
+    "_comment_template": "PRODUCTION TEMPLATE: company press / investor-news listing page — replace url + add the COMPANY_WEBSITE selectors the collector expects (see backend/app/collectors/company_website_collector.py).",
+    "name": "PRODUCTION TEMPLATE: Manufacturer Press Page",
+    "source_type": "company_website",
+    "url": "https://example.com/REPLACE-with-real-press-listing",
+    "is_active": false,
+    "region_tags": ["eu"],
+    "sector_tags": ["machinery", "automotive"],
+    "customer_type_tags": ["manufacturer", "exporter"],
+    "signal_focus_tags": ["new_factory", "capacity_increase", "investment_incentive"],
+    "language": "en",
+    "priority": 105,
+    "quality_score": 0.75,
+    "noise_level": 0.25,
+    "config": {}
+  }
+]
