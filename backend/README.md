@@ -85,17 +85,70 @@ python scripts/seed_source_pool.py --file seed/source_pool.example.json --dry-ru
 > `docker-compose` — every other argument is identical.
 
 Real production manifests (`seed/source_pool.production.json`) are
-excluded from the repo via `.gitignore`. Two example templates are
-tracked:
+excluded from the repo via `.gitignore`. Two scaffolds are tracked:
 
-- `seed/source_pool.example.json` — minimal scaffold with
-  `example.com` URLs, used in the dry-run smoke test.
-- `seed/source_pool.production.example.json` — production-shaped
-  template with realistic tag combinations and `is_active: false`
-  placeholders. Copy this to `seed/source_pool.production.json`,
-  replace the `REPLACE-with-real-…` URLs with vetted feeds, and
-  flip `is_active` to `true` per record after the platform admin
-  reviews each one. Source pool is **never** managed by tenant users.
+- `seed/source_pool.example.json` — minimal dry-run scaffold with
+  `example.com` URLs, used in the seed-script unit tests.
+- `seed/source_pool.production.template.json` — operations-ready
+  template aligned with the eight source categories defined in
+  [`docs/phase_12_production_source_pool_strategy.md`](../docs/phase_12_production_source_pool_strategy.md).
+  Every record carries an `_comment_category` tag (e.g. `A1`, `B1`,
+  `E1`) so the next operator can trace a row back to the strategy
+  doc. URLs are literal `REPLACE_WITH_REAL_URL` placeholders;
+  `is_active` is `false` on every record.
+
+### Production source pool — operations workflow
+
+The source pool is **never** managed by tenant users; only the
+platform admin curates it. The strategy doc is the contract for what
+"good" looks like — tagging rules, eight category matrix, validation
+checklist, phased rollout. The workflow below is the day-to-day use
+of that doc.
+
+```bash
+# 1. Copy the template to the gitignored production manifest.
+cp seed/source_pool.production.template.json \
+   seed/source_pool.production.json
+
+# 2. For each record: replace REPLACE_WITH_REAL_URL with a vetted
+#    feed; tweak tags so they accurately describe the publication;
+#    keep is_active=false until the row passes the §5 checklist in
+#    the strategy doc.
+
+# 3. Dry-run validates without writing — confirms the JSON is
+#    parseable and each record clears the script's strict validators.
+docker compose -f docker-compose.prod.yml exec backend bash -lc \
+  "cd /app && python scripts/seed_source_pool.py \
+     --file seed/source_pool.production.json --dry-run"
+
+# 4. Apply with --update-existing so re-runs converge instead of
+#    erroring on a URL that already landed in the pool.
+docker compose -f docker-compose.prod.yml exec backend bash -lc \
+  "cd /app && python scripts/seed_source_pool.py \
+     --file seed/source_pool.production.json --update-existing"
+# Output: created=N updated=N skipped=N invalid=N
+```
+
+After the apply:
+
+```bash
+# 5. Verify in the Source Pool admin UI as PLATFORM_ADMIN —
+#    https://<DOMAIN>/source-pool. Each row should show the
+#    expected tags, status badge, and quality / noise numbers.
+
+# 6. Targeting smoke from a tenant_admin: log in, run /onboarding
+#    or hit /targeting, save, click "Run pipeline now". Watch the
+#    backend log for one line per matched source:
+#       Detection finished tenant=… source=… items=N llm_calls=N
+#       gate_skips=N signals=N failures=N
+#    A non-zero llm_calls + at least one signal within 24h means
+#    the pool is producing leads for that tenant.
+```
+
+If `llm_calls` is high but `signals` is zero, the source's
+`signal_focus_tags` probably do not match the LLM's actual
+classifications — re-read the strategy doc §5 checklist before
+flipping `is_active=true` on more rows from the same category.
 
 Each record supports: `name`, `source_type` (one of `news`,
 `job_board`, `company_website`), `url`, `is_active`, the four tag

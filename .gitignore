@@ -47,4 +47,4 @@ tmp/
 # is ignored by default.
 backend/seed/*
 !backend/seed/source_pool.example.json
-!backend/seed/source_pool.production.example.json
+!backend/seed/source_pool.production.template.json
