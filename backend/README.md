@@ -102,8 +102,26 @@ excluded from the repo via `.gitignore`. Two scaffolds are tracked:
 The source pool is **never** managed by tenant users; only the
 platform admin curates it. The strategy doc is the contract for what
 "good" looks like — tagging rules, eight category matrix, validation
-checklist, phased rollout. The workflow below is the day-to-day use
-of that doc.
+checklist, phased rollout. The first-time seeding worksheet is in
+[`docs/phase_12_1_first_production_source_pool_curation.md`](../docs/phase_12_1_first_production_source_pool_curation.md):
+it walks the operator through 16 candidate rows, the validation
+gate, and the first-active recommendation.
+
+The workflow below is the day-to-day use of that doc.
+
+> Validator helper: a working candidate file lives at
+> `seed/candidates.working.json` (gitignored). To run automated
+> reachability + feed-parse checks against it, render a Markdown
+> table for the worksheet:
+>
+> ```bash
+> docker compose -f docker-compose.prod.yml exec backend bash -lc \
+>   "cd /app && python scripts/validate_source_candidates.py \
+>      --file seed/candidates.working.json --format md"
+> ```
+>
+> JSON output is also available with `--format json` for piping into
+> other tools.
 
 ```bash
 # 1. Copy the template to the gitignored production manifest.
