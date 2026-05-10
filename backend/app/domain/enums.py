@@ -2,7 +2,24 @@ from enum import StrEnum
 
 
 class SourceType(StrEnum):
+    """Collector dispatch key for the platform source pool.
+
+    `news`            — RSS / Atom feed parsed with feedparser.
+    `news_html`       — HTML listing page (publication category /
+                        archive). Reuses the company_website
+                        collector at the registry level — same
+                        selector-driven HTML iteration, semantically
+                        distinct so analytics can split publication
+                        listings from single-company newsrooms.
+                        Added in Phase 12.5 once migration 0008 lifted
+                        the legacy CHECK constraint that pinned the
+                        column to the original three values.
+    `job_board`       — listing page where each row is a job posting.
+    `company_website` — single-company press / newsroom listing.
+    """
+
     NEWS = "news"
+    NEWS_HTML = "news_html"
     JOB_BOARD = "job_board"
     COMPANY_WEBSITE = "company_website"
 

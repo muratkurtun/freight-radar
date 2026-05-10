@@ -162,6 +162,45 @@ def test_validate_rejects_unknown_source_type():
     assert any("source_type" in i for i in issues)
 
 
+def test_validate_accepts_news_html_source_type():
+    """Phase 12.5 added news_html to SourceType. The validator's
+    `_VALID_SOURCE_TYPES` is built from the enum at import time so the
+    new value flows through automatically — this test locks that
+    contract in case someone hardcodes the set later."""
+    record = {
+        "name": "x",
+        "source_type": "news_html",
+        "url": "https://example.com/category/exports",
+        "region_tags": ["turkey"],
+        "sector_tags": ["industrial"],
+        "customer_type_tags": ["exporter"],
+        "signal_focus_tags": ["export_expansion"],
+    }
+    assert seed_source_pool._validate(record) == []
+
+
+def test_validate_accepts_all_source_types_in_enum():
+    """Sanity floor: every SourceType enum value must round-trip
+    through the seed validator. If a future enum value lands without
+    the validator being aware, this test fires — the seed bill of
+    materials must stay in sync with the read path."""
+    from app.domain.enums import SourceType
+
+    base = {
+        "name": "x",
+        "url": "https://example.com/path",
+        "region_tags": ["turkey"],
+        "sector_tags": ["industrial"],
+        "customer_type_tags": ["exporter"],
+        "signal_focus_tags": ["export_expansion"],
+    }
+    for st in SourceType:
+        record = {**base, "source_type": st.value}
+        assert seed_source_pool._validate(record) == [], (
+            f"validator rejected SourceType.{st.name} = {st.value!r}"
+        )
+
+
 def test_validate_rejects_empty_tag_arrays():
     record = {
         "name": "x",

@@ -169,12 +169,36 @@ classifications — re-read the strategy doc §5 checklist before
 flipping `is_active=true` on more rows from the same category.
 
 Each record supports: `name`, `source_type` (one of `news`,
-`job_board`, `company_website`), `url`, `is_active`, the four tag
-arrays (`region_tags`, `sector_tags`, `customer_type_tags`,
-`signal_focus_tags`), `language`, `priority`, `quality_score` and
-`noise_level` (both `Numeric(3,2)` so 0.00–1.00 — divide a 0–100
-score by 100 before seeding), and `config` (collector-specific dict).
-Validation is fail-fast unless `--skip-invalid` is passed.
+`news_html`, `job_board`, `company_website`), `url`, `is_active`,
+the four tag arrays (`region_tags`, `sector_tags`,
+`customer_type_tags`, `signal_focus_tags`), `language`, `priority`,
+`quality_score` and `noise_level` (both `Numeric(3,2)` so
+0.00–1.00 — divide a 0–100 score by 100 before seeding), and
+`config` (collector-specific dict). Validation is fail-fast unless
+`--skip-invalid` is passed.
+
+`source_type` semantics:
+
+| value             | what to point at                                             | collector            |
+|-------------------|--------------------------------------------------------------|----------------------|
+| `news`            | RSS / Atom feed URL                                          | feedparser-based     |
+| `news_html`       | Publication category / archive HTML page (no usable RSS)     | HTML + CSS selectors |
+| `job_board`       | Listing page where each row is a job posting                 | HTML + CSS selectors |
+| `company_website` | Single-company press / newsroom listing page                 | HTML + CSS selectors |
+
+`news_html` and `company_website` share the same collector
+implementation — the split is semantic, for analytics and operator
+discipline. Use `news_html` for a publication's category page (e.g.
+`dunya.com/ihracat`) and `company_website` for a single company's
+press list (e.g. an industrial firm's `/basin-bultenleri/`).
+Migration `0008_drop_sources_source_type_check` lifted the legacy
+DB CHECK that pinned the column to the original three values; from
+that revision onwards the SourceType enum is the write authority.
+
+> **Downgrade caveat for migration 0008.** The downgrade re-adds the
+> original CHECK on the original three values. If any post-upgrade
+> row carries `news_html`, the constraint creation will fail. A real
+> rollback requires deleting or re-typing those rows first.
 
 Idempotency: the match key is the URL normalized to lowercase with
 the trailing slash stripped. Running the same file twice is safe.

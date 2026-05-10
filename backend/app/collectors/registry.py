@@ -9,6 +9,11 @@ _REGISTRY: dict[str, type[BaseCollector]] = {
     SourceType.NEWS.value: NewsCollector,
     SourceType.JOB_BOARD.value: JobBoardCollector,
     SourceType.COMPANY_WEBSITE.value: CompanyWebsiteCollector,
+    # `news_html` reuses CompanyWebsiteCollector verbatim — both types
+    # iterate a CSS-selector-driven HTML listing page. The semantic
+    # split lives in the enum and in operator analytics, not in the
+    # collector code. Phase 12.4 §1 captures the rationale.
+    SourceType.NEWS_HTML.value: CompanyWebsiteCollector,
 }
 
 
